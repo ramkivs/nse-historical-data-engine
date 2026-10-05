@@ -42,19 +42,19 @@ def classify(series: str):
     if s == "BZ":
         return ("EQUITY_T2T", "NSE legend: mainboard equity/ETF moved to Trade-for-Trade (Z category).")
     if s in ("ST", "SZ"):
-        return ("EQUITY_SME_T2T", "NSE legend: SME equity T2T variants. Corpus shows large ST distribution shift at the format transition (unexplained).")
+        return ("EQUITY_SME_T2T", "NSE legend: SME equity T2T variants. Corpus shows a large ST distribution discontinuity at the format transition; cause unresolved (distribution change observed, not a proven semantic break).")
     if re.fullmatch(r"E[1-9A-Z]", s):
         return ("EQUITY_PARTLYPAID", "NSE legend: partly paid equity shares (rolling), E@.")
     if re.fullmatch(r"X[1-9A-Z]", s):
         return ("EQUITY_PARTLYPAID_T2T", "NSE legend: partly paid equity T2T variants, X@.")
     if s == "BL":
         return ("OVERLAY_BLOCK_DEALS",
-                "NSE legend: Block Deals sub-segment. D02 aggregate evidence: BL rows coincide with per-file distinct-ISIN deficits (rows do not introduce new securities).")
+                "NSE legend: Block Deals sub-segment. D02 aggregate evidence: BL rows account for the per-file ISIN-deficit pattern; whether they repeat the base security's ISIN or leave it blank is unresolved (D02-Q1).")
     if s == "BO":
         return ("OVERLAY_BUYBACK_WINDOW", "NSE legend: buyback of equity shares via stock-exchange route.")
     if s == "T0":
         return ("OVERLAY_T0_SETTLEMENT",
-                "NSE T+0 settlement FAQ: same securities trade in a separate T0 series (first corpus sighting 2024-03-28 matches the optional T+0 pilot window).")
+                "NSE T+0 settlement FAQ: same securities trade in a separate T0 series (first corpus sighting 2024-03-28 — a Legacy-era date — matches the optional T+0 pilot window). Aggregate ISIN-deficit behavior matches overlay treatment; row-level base-row linkage unproven (D02-Q1/Q8).")
     if s in ("IT", "IL"):
         return ("OVERLAY_INSTITUTIONAL_WINDOW_HYPOTHESIS",
                 "Not in NSE legend. Third-party mapping: IL = FII-to-FII trading window. Treat as hypothesis pending fixtures.")
@@ -165,7 +165,7 @@ def main():
 
     L, U = by_date("2024-07-05"), by_date("2024-07-08")
     series_union = sorted(set(L["series_counts"]) | set(U["series_counts"]),
-                          key=lambda s: -(L["series_counts"].get(s, 0) + U["series_counts"].get(s, 0)))
+                          key=lambda s: (-(L["series_counts"].get(s, 0) + U["series_counts"].get(s, 0)), s))
     with open(os.path.join(HERE, "d02_transition_20240705_vs_20240708.csv"), "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["series", "legacy_20240705_rows", "udiff_20240708_rows"])
@@ -186,7 +186,7 @@ def main():
         w = csv.writer(f)
         w.writerow(["series", "legacy_avg_rows_per_day_last250", "udiff_avg_rows_per_day_first250", "delta"])
         for s in sorted(set(La) | set(Ua),
-                        key=lambda s: -(abs(Ua.get(s, 0) - La.get(s, 0)))):
+                        key=lambda s: (-abs(Ua.get(s, 0) - La.get(s, 0)), s)):
             l, u = La.get(s, 0.0), Ua.get(s, 0.0)
             w.writerow([s, round(l, 2), round(u, 2), round(u - l, 2)])
 

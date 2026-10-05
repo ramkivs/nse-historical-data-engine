@@ -1,6 +1,11 @@
 # D02 — Historical Equity Eligibility & Identity Investigation Record
 
 Gate: D02 (read-only investigation)
+Record revision: **Rev 2 — pre-merge correction pass (2026-10-05)**, implementing review items C1–C9
+(precision/wording corrections only: UDiFF field count, ISIN-candidate language, overlay-ISIN wording,
+fixture status classification, series-state phrasing, ST characterization, fixture date boundaries,
+2022-10-03 neutrality, `security_id` proposal status). No findings, fixtures, boundaries, or open
+questions were otherwise altered; see §13 revision log.
 Date: 2026-10-05
 Baseline: `origin/main` @ `410135d` ("Establish NSE 10Y archive evidence baseline", D01)
 Environment: ARENA (no access to Windows raw archive directories)
@@ -56,7 +61,7 @@ pending a later gate.
   `SYMBOL|SERIES|OPEN|HIGH|LOW|CLOSE|LAST|PREVCLOSE|TOTTRDQTY|TOTTRDVAL|TIMESTAMP|TOTALTRADES|ISIN|`
   (13 fields + trailing empty field); (b) 2 Legacy files *without* the trailing empty field
   (`cm10JUL2017bhav.csv.zip`, `cm13JUL2020bhav.csv.zip`); (c) all 543 UDiFF files with the single
-  33-field header `TradDt|BizDt|Sgmt|Src|FinInstrmTp|FinInstrmId|ISIN|TckrSymb|SctySrs|XpryDt|
+  34-field header `TradDt|BizDt|Sgmt|Src|FinInstrmTp|FinInstrmId|ISIN|TckrSymb|SctySrs|XpryDt|
   FininstrmActlXpryDt|StrkPric|OptnTp|FinInstrmNm|OpnPric|HghPric|LwPric|ClsPric|LastPric|PrvsClsgPric|
   UndrlygPric|SttlmPric|OpnIntrst|ChngInOpnIntrst|TtlTradgVol|TtlTrfVal|TtlNbOfTxsExctd|SsnId|
   NewBrdLotQty|Rmks|Rsvd1|Rsvd2|Rsvd3|Rsvd4`.
@@ -135,17 +140,20 @@ pending a later gate.
 - **[FINDING D02-D4]** The deficit `row_count − isin_count` tracks overlay rows almost exactly:
   `deficit == rows(BL) + rows(T0)` holds for **2,159/2,462 files (87.7%)**, including **541/543 (99.6%)**
   UDiFF files; the 300 files with residual +1/+2 are all Legacy files from 2016–2018, and 3 files sit at
-  −1 (see `d02_metrics.json`). Whatever `isin_count` means (Q1), the *only* rows behaving differently are
-  block-deal and T+0 rows. Interpretations, both consistent with the data: (a) BL/T0 rows repeat the base
-  security's ISIN (duplicate distinct values), or (b) BL/T0 rows carry empty ISIN values. Under (a),
-  every other series row in the corpus carries a present ISIN; under (b), same. Either way,
-  **[FINDING D02-D5]** **ISIN is populated for essentially all security rows of both formats** (a
-  strong continuity asset), but **(ISIN) alone is not a unique day-key** — the same ISIN may appear in
-  a security row and in an overlay row on the same date, and rights/other edge cases remain to be seen.
+  −1 (see `d02_metrics.json`). Whatever `isin_count` means (Q1), the *only* rows whose aggregate ISIN
+  behavior differs from ordinary security rows are block-deal and T+0 rows. Two interpretations remain
+  compatible with the data: (a) BL/T0 rows repeat the base security's ISIN (duplicate distinct values),
+  or (b) BL/T0 rows carry empty ISIN values. **The current aggregate evidence cannot determine whether
+  BL/T0 rows repeat the base ISIN or carry blank ISIN values; same-day ISIN duplication across
+  base/overlay rows therefore remains unproven** (resolved only by FIX-SEM-DEF-01 + row-level blanks/
+  duplicates census FIX-LEG-CENSUS-01 / FIX-UD-CENSUS-01). What both readings do support is
+  **[FINDING D02-D5]**: **ISIN is populated on essentially all security rows of both formats** — a
+  strong continuity asset — but it is *not demonstrated* to be a unique per-date key, and rights/other
+  edge cases remain to be seen.
 - **[OPEN QUESTION D02-Q1]** Definition of D01's `isin_count`/`symbol_count` (distinct-non-blank vs
   non-blank row count vs other) — the generating script is not in the repository and this is not
   recoverable from the artifacts. Resolvable cheaply: fixture FIX-SEM-DEF-01 (or a one-line answer from
-  the D01 script author) plus FIX-CENSUS-01 counts of literal blanks.
+  the D01 script author) plus FIX-LEG-CENSUS-01 / FIX-UD-CENSUS-01 counts of literal blanks.
 - **[OPEN QUESTION D02-Q2]** Are the `ISIN` *values* structurally valid (12 chars, `IN…`, check digit)
   across both eras? Header evidence says the column exists; nothing in-repo says the values are clean.
   FIX-LEG-CENSUS-01 answers this.
@@ -196,9 +204,10 @@ Universe-structure facts and findings:
 - **[FINDING D02-D7]** `ST` exhibits a distribution discontinuity at the transition with no vocabulary
   change: 16.9 rows/day average over the last 250 Legacy files vs **124.7 rows/day** over the first 250
   UDiFF files (E2: `d02_series_distribution_shift.csv`), while `SM` moves 197→242. Either SME T2T
-  placement genuinely jumped around mid-2024, or the *usage* of `ST` differs between formats. This is a
-  direct counter-example to treating a series code's semantics as format-independent. Blocked on
-  FIX-UD-CENSUS-01 + FIX-SERIES-EVENTS-01.
+  placement genuinely jumped around mid-2024, or the *usage* of `ST` differs between formats. What the
+  evidence establishes is a **distribution discontinuity / semantic-interpretation anomaly** at the
+  boundary — not a proven semantic break; it cautions against assuming format-independent code
+  semantics but does not by itself overturn them. Blocked on FIX-UD-CENSUS-01 + FIX-SERIES-EVENTS-01.
 - **[RECOMMENDATION D02-R2 — PROPOSAL PENDING APPROVAL]** Publish `d02_series_universe.csv` as the seed
   of the governed classification table (D02-R1), with each row's `provisional_class` explicitly
   `approval=pending`, `evidence=<legend|corpus-observation|hypothesis>`.
@@ -209,14 +218,18 @@ Universe-structure facts and findings:
 
 Mapping of observed fields to identity roles, per the two schemas (F5, F6) and E2 aggregates:
 
-1. **Durable security identity** — *ISIN* is the only candidate present in **both** formats and (D02-D5)
-   effectively always populated for security rows. Caveats: uniqueness holds only per (date, series) —
-   overlays repeat it (D02-D4/D5); validity of values is unverified (Q2); whether *the same company's*
-   shares in a new series get a *new* ISIN (series-part-of-ISIN semantics) is not answerable from E1 —
-   **[OPEN QUESTION D02-Q3]**, fixture FIX-ISIN-SEM-01. (Series migration between two ISINs for one company — e.g.
-   equity shares of the same company trading simultaneously in EQ and BL/T0/other series — is exactly why
-   the *analytical security* may need to be (company, instrument-class), with series-scoped ISINs as
-   instrument identities. Unresolved design question, not a decision.)
+1. **Durable security identity (candidate — unproven)** — ISIN is currently the **strongest cross-format
+   durable-identity candidate** identified by the available evidence: it is the only identity-like field
+   present in **both** schemas (F5, F6) and, under either reading of the D01 metric, populated on
+   essentially every security row (D02-D5). **Durability, validity, uniqueness, and continuity remain
+   unproven pending D03 fixtures**: value validity (D02-Q2, FIX-LEG-CENSUS-01), row-level uniqueness/
+   overlay behavior and `isin_count` semantics (D02-Q1, FIX-SEM-DEF-01, FIX-UD-CENSUS-01), and
+   cross-format/key-semantics questions — whether the *same company's* shares in a changed series get a
+   *new* ISIN (series-part-of-ISIN semantics) is not answerable from E1 — D02-Q3, addressed via
+   FIX-SYMBOL-HIST-01 / FIX-UD-CENSUS-01 joined against FIX-XCONT-01. (Series migration between two
+   ISINs for one company — e.g. shares trading simultaneously in EQ and a BL/T0/other series — is
+   exactly why the *analytical security* may need to be (company, instrument-class) with series-scoped
+   ISINs as instrument identities. Unresolved design question, not a decision.)
 2. **Source-specific instrument identity** — UDiFF `FinInstrmId`: present in header for all 543 files;
    values never captured by D01; its format/namespace/relationship to ISIN is entirely unknown
    **[OPEN QUESTION D02-Q4]** (FIX-UD-CENSUS-01 / FIX-UD-ROW-SAMPLE-01). Legacy has no equivalent ID
@@ -229,12 +242,13 @@ Mapping of observed fields to identity roles, per the two schemas (F5, F6) and E
    instruments (per-issue ticker suffixing on the debt side is the likely mechanism, unverified). Any
    join strategy must therefore differ per format; **"join on ticker" is unsafe on Legacy** at least
    without also joining series.
-4. **Time-varying series/classification** — `SERIES`/`SctySrs`. **[FINDING D02-D9]** In this corpus,
-   series is demonstrably *not* an immutable attribute of a security: it is a per-date trading-regime
-   state (surveillance T2T moves EQ↔BE/BZ; T+0 adds a parallel series; rights add BE; buyback windows add
-   BO). Row-level evidence of per-security transitions is *not* available from E1 (per-file aggregates
-   only), but the file-level behavior (deficit=BL+T0, D02-D4; code lifecycles, D02-F10) already forces
-   treating (security, series) as state-at-dated, not as identity. FIX-SERIES-EVENTS-01 quantifies it.
+4. **Time-varying series/classification** — `SERIES`/`SctySrs`. **[FINDING D02-D9]** Series should
+   currently be treated as a **potentially time-varying dated classification/state**, and must not be
+   used as immutable security identity: the file-level signals (deficit = BL+T0, D02-D4; code lifecycles,
+   D02-F10) are *consistent with* per-date regime states (surveillance T2T, T+0 parallel series, rights
+   via BE, buyback windows), but **individual security transitions (e.g. EQ↔BE moves) have not been
+   proven from D01 aggregates** — row-level per-security histories are absent from E1. FIX-SERIES-EVENTS-01
+   is the evidence that would confirm or refute per-security series-transition behavior.
 5. **Market-segment identity** — UDiFF `Sgmt` (+`Src`): header-present, values unknown (Q4). **[FACT
    D02-F11]** Legacy has NO segment field; the Legacy filename's `cm` prefix and the corpus itself are
    the only segment evidence. **[OPEN QUESTION D02-Q5]** whether UDiFF `Sgmt` values distinguish
@@ -338,7 +352,7 @@ Explicitly pending a later schema-finalization gate.**
 |---|---|---|---|
 | `trading_date` (=TradDt; Legacy TIMESTAMP parsed date) | yes | F2, D02-F2 date-format drift | must be *derived* per-format, not trusted from filename |
 | `business_date` (=BizDt) | yes (UDiFF); Legacy = same as trading date (no BizDt exists — F5), must be marked *assumed* | F5, F6 | TradDt≠BizDt cases: count unknown → FIX-UD-ROW-SAMPLE-01 |
-| `security_id` (surrogate, durable) | yes | R3 | populated via ISIN where present (D5); fallback for blank-ISIN rows is design-pending (Q1/Q3) |
+| `security_id` | yes | R3 | **proposed durable internal identity concept; resolution strategy pending D03.** `security_id = ISIN` is NOT assumed or approved; ISIN is currently the strongest candidate input (C2 language, §4.1). Fallback strategy for blank-ISIN/overlay rows is design-pending (Q1/Q3) |
 | `isin` (nullable, source-verbatim + normalized) | yes | F5, F8 | keep raw string AND validity flag (Q2) |
 | `symbol_as_of_date` (alias ref, not identity) | yes | D8, R3 | |
 | `series_at_date` (=SERIES/SctySrs, verbatim) | yes | D9, F9 | drives eligibility class via governed table (R1), never hard-coded |
@@ -363,25 +377,40 @@ Explicitly pending a later schema-finalization gate.**
 
 ## 9. Section H — Minimum Windows-side fixtures required to close D02 questions
 
-Each fixture: to be generated on the Windows environment by read-only scan of the existing archives
-into the repository (controlled extracts only; no production ingestion). `D01-insufficient` explains why
-this cannot already be answered from committed evidence. These are **requests for evidence**, not
-implementation work.
+Twelve fixtures are requested (12 IDs below; status classification after the table). Each fixture is,
+unless its row states a different source, generated on the Windows environment by read-only scan of the
+existing archives into the repository (controlled extracts only; no production ingestion).
+`D01-insufficient` explains why this cannot already be answered from committed evidence. These are
+**requests for evidence**, not implementation work.
 
 | ID | Purpose | Source | Required fields/aggregates | Question answered | Why D01 evidence is insufficient |
 |---|---|---|---|---|---|
 | **FIX-SEM-DEF-01** | Pin down `isin_count`/`symbol_count` semantics in the D01 inventory | D01 script (not in repo) or re-emit one file both ways | For 5 sampled files: row count, distinct-ISIN, non-blank-ISIN, distinct-symbol, non-blank-symbol | Q1 | Script absent; metrics underdetermined (both readings fit D02-D4) |
 | **FIX-UD-CENSUS-01** | UDiFF identity & eligibility census | all 543 UDiFF archives, row-level scan | Per file, grouped by `(Sgmt, Src, FinInstrmTp, SctySrs)`: row count, blank-ISIN count, blank-FinInstrmId count, `FinInstrmId==ISIN` count, distinct ISIN/symbol | A (governed combination), C2/C5, Q4, Q5, D2-D7 (ST shift census), D02-Q3 partial | D01 captured headers only; zero per-row values for the decisive columns |
-| **FIX-UD-ROW-SAMPLE-01** | Ground-truth rows for semantics of special fields | stratified: 5 dates (first day of UDiFF, T+0 active day e.g. 2024-03-28-adjacent UDiFF analogue, 2025-10-30 (max T0), 2026-08-25 (last MF), any BL-spike day) | full 33 columns, ≤2,000 rows per date, guaranteed inclusion of: ETF tickers (e.g. NIFTYBEES, GOLDBEES), RE-prefixed rows, BL/T0/BO/IT rows, MF/GB/GS/TB rows, any TradDt≠BizDt rows | H1; F18 (FinInstrmNm population); Q7; BizDt semantics | Aggregates cannot show values; sampling design depends on this |
+| **FIX-UD-ROW-SAMPLE-01** | Ground-truth rows for semantics of special fields, **stratified across both formats** | Dates spanning Legacy and UDiFF: UDiFF — 2024-07-08 (first day), 2025-10-30 (max T0/SF activity), 2026-08-25 (last MF day); Legacy — 2024-03-28 (first/max T0 sighting in corpus, Legacy-era) and 2022-10-03 (max BL spike). Sampling across the format boundary is intentional: the T0 pilot began in the Legacy era, so Legacy T+0 activity and UDiFF-era special-series activity must be compared on equal footing | All fields verbatim (UDiFF: 34 columns; Legacy: 13 fields + trailing empty field), ≤2,000 rows per date, guaranteed inclusion of: ETF tickers (e.g. NIFTYBEES, GOLDBEES), RE-prefixed rows, BL/T0/BO/IT rows, MF/GB/GS/TB rows, any TradDt≠BizDt rows | H1; F18 (FinInstrmNm population); Q7; BizDt semantics; C7 date-boundary evidence | Aggregates cannot show values; sampling design depends on this |
 | **FIX-LEG-CENSUS-01** | Legacy identity census | all 1,919 Legacy archives, row-level scan | Per file: rows; rows with blank/whitespace ISIN; ISIN regex violations (`^IN[A-Z0-9]{9}[0-9]$` after trim); `RE`-prefix symbol count per series; ETF-list membership count within EQ (against eq_etfseclist — see FIX-SECMASTER-01); (symbol,series) duplicate count; per-date series counts (already in D01 — keep as cross-check) | A (Legacy-era limits, D3), Q2, D02-D4 alternative readings, rights-issue identification | D01 stored only distinct counts and series totals; value validity and ETF/rights membership never extracted |
 | **FIX-XCONT-01** | Cross-format continuity measurement | Legacy 2024-07-05 (and 2024-06-24→07-05 week) vs UDiFF 2024-07-08 (and week) | ISIN join: matched count; legacy-only list; udiff-only list; matched rows with differing (trimmed, uppercased) symbol; per-series breakdown of each class | D (continuity); sizes H2; determines whether ISIN-first identity holds at the boundary | D01 has file-level vectors only (F13); join needs row keys |
 | **FIX-SYMBOL-HIST-01** | Rename ledger (time-varying symbol vs durable identity) | all 2,462 files, grouped by ISIN (both formats) | Per ISIN: distinct symbols with first/last date and day-count each; series intervals likewise; output only rows with ≥2 symbols or ≥2 series + summary counts | E; D16; validates R3 alias model | Requires per-row (ISIN, symbol, date) tuples never extracted |
 | **FIX-SERIES-EVENTS-01** | Series-transition event census | as above grouped by ISIN | counts of transitions EQ↔BE↔BZ↔SM/ST/SZ↔T0/other with date histogram; include ST census across both eras (explains D7?) | C4 (state-at-date), D7 | Same reason; aggregate files cannot trace one security across days |
-| **FIX-OVERLAY-SEM-01** | Overlay row semantics (volume/price vs base row) | 30 dates (15 Legacy incl. 2022-10-03, 15 UDiFF incl. 2024-03-28/2025-10-30) | For every BL/T0/BO/IT/IL row: its OHLCV vs the same-ISIN base row(s) same day; count of overlay rows whose base row is absent | Q8; canonical `overlay_flag` design (G) | Whether overlays duplicate volume is invisible in counts |
+| **FIX-OVERLAY-SEM-01** | Overlay row semantics (volume/price vs base row) | 30 dates across both formats (15 Legacy incl. 2022-10-03 and 2024-03-28; 15 UDiFF incl. 2024-07-08 and 2025-10-30) | For every BL/T0/BO/IT/IL row: its OHLCV vs the same-ISIN base row(s) same day; count of overlay rows whose base row is absent | Q8; canonical `overlay_flag` design (G) | Whether overlays duplicate volume is invisible in counts |
 | **FIX-CAL-01** | Calendar reconciliation | NSE official holiday calendars 2016–2026 (published) + `evidence/identity/d02_missing_weekdays.txt` | Mark each of the 147 missing weekday-dates: holiday / other; and flag any file-date that falls on a published full-market holiday | F4; durability of business-date model | D01 recorded existence only; no calendar evidence in repo |
 | **FIX-ANOM-01** | Schema-anomaly raw inspection | `cm10JUL2017bhav.csv.zip`, `cm13JUL2020bhav.csv.zip` + neighbors | full header, first/last 10 raw rows, count of 2-digit-year TIMESTAMP rows, line-ending/encoding info, plus re-check vs NSE-published copies (size+sha) if obtainable | parser robustness policy for provenance (G `raw_row_hash`) | D01 captured header signature + date map but not raw structure |
 | **FIX-CIRC-01** | Meaning-by-era of unmapped/contradictory codes (IT, IL, SO, HA–HE, T0, IV-pre-2019, ST-usage change) | NSE circular archive (document search, not data) | citations + effective dates for each code | B (UNCLASSIFIED bucket), D6, D7 | Legend is single point-in-time (2024); corpus spans 10 years |
-| **FIX-SECMASTER-01** *(authorization-gated)* | Security-master capability scoping for name lookup | **Not from local archives**: NSE public security-master / `eq_etfseclist` snapshots for the same 5 FIX-UD-ROW-SAMPLE-01 dates (field inventory + ≤500-row samples + schema doc, stored as evidence not as data product) | isin, symbol, series, company name, settlement type, listing/delisting, status; snapshot dates | F (name→identity→observations chain); ETF membership for Legacy eligibility (D3) | Entirely absent from corpus by design (F15); **acquisition/ownership requires explicit separate authorization — not requested as a file fixture, offered as a scoping sample only if approved** |
+| **FIX-SECMASTER-01** *(authorization-gated)* | Security-master capability scoping for name lookup | **Not from local archives**: NSE public security-master / `eq_etfseclist` snapshots for the FIX-UD-ROW-SAMPLE-01 sample dates (both eras, minimum one Legacy-era and one UDiFF-era) (field inventory + ≤500-row samples + schema doc, stored as evidence not as data product) | isin, symbol, series, company name, settlement type, listing/delisting, status; snapshot dates | F (name→identity→observations chain); ETF membership for Legacy eligibility (D3) | Entirely absent from corpus by design (F15); **acquisition/ownership requires explicit separate authorization — not requested as a file fixture, offered as a scoping sample only if approved** |
+
+Fixture status classification (12 total, internally consistent):
+
+* **Directly executable Windows archive scans (8):** FIX-UD-CENSUS-01, FIX-UD-ROW-SAMPLE-01,
+  FIX-LEG-CENSUS-01, FIX-XCONT-01, FIX-SYMBOL-HIST-01, FIX-SERIES-EVENTS-01, FIX-OVERLAY-SEM-01,
+  FIX-ANOM-01.
+* **Directly executable published-evidence tasks (2):** FIX-CAL-01 (official holiday calendars vs the
+  committed missing-weekday list) and FIX-CIRC-01 (NSE circular research) — no raw-archive access needed;
+  document evidence only.
+* **Provenance / semantic reconstruction (1):** FIX-SEM-DEF-01 — resolves the meaning of D01's
+  `isin_count`/`symbol_count`; requires the (uncommitted) D01 inventory script or a minimal re-emission,
+  not a corpus scan.
+* **Authorization-gated (1):** FIX-SECMASTER-01 — scoping sample for the security-master capability;
+  acquisition/ownership is **not granted by D02** and must be approved separately before any collection.
 
 Fixture budget note: every row-level scan above is one pass over files Windows already holds; each
 produces aggregates or bounded samples — no corpus copies enter the repository.
@@ -397,13 +426,16 @@ produces aggregates or bounded samples — no corpus copies enter the repository
    to D02-D4; FIX-SEM-DEF-01 will classify it.
 3. **[FACT]** 3 files where deficit = BL+T0−1; 300 Legacy files 2016–2018 with deficit = BL+T0+1/+2
    (cohort; no cause determinable from aggregates).
-4. **[FACT]** `ST` ×7 usage jump at the transition (D7) with stable vocabulary.
+4. **[FACT]** `ST` rows/day discontinuity at the transition (≈16.9 → 124.7, ≈7.4×) with stable
+   vocabulary (D02-D7) — observed distribution change; cause (regime usage vs. semantic re-purposing vs.
+   SME growth mix) unresolved.
 5. **[FACT]** `IT` survives the transition by 4 months then vanishes (2024-11-14); `BO` vanished
    2023-12-27 mid-Legacy. Window/overlay lifecycles are not synchronized with format change.
-6. **[FACT]** 2022-10-03 (a date widely treated as a Gandhi-Jayanti-adjacent holiday) contains a normal
-   full session (2,616 rows, EQ 1,813) **plus** 313 BL rows — either the market traded, or the file is
-   mis-dated internally (its own TIMESTAMP says 03-OCT-2022). FIX-CAL-01/FIX-ANOM-01 territory; no claim
-   made here.
+6. **[FACT]** 2022-10-03 requires reconciliation against the official NSE trading calendar
+   (FIX-CAL-01). Observed archive facts only: a 2,616-row file for that date exists, containing 1,813
+   EQ rows **plus** 313 BL rows, with internal TIMESTAMP values of `03-OCT-2022`. Whether the date was
+   a trading day, a holiday, or a misdated/misattributed file is **not decided in this record**; D02
+   notes only that no calendar reconciliation evidence exists in the repository yet.
 7. **[FACT]** 2020-07-13 is the NSE/BSE market-freeze glitch date; its archive differs in *two* ways
    (header + date format) — coincidence or recovery artifact; unproven.
 
@@ -414,30 +446,57 @@ produces aggregates or bounded samples — no corpus copies enter the repository
   (D7). Both statements are current public facts; the data says neither cleanly. Left open.
 - `IV` in-corpus life (from 2017-05-18) predates the legend's InvIT-era meaning (D6). Left open pending
   FIX-CIRC-01.
-- D02-D4 supports "every non-overlay row has a present ISIN" — but under reading (b) of Q1 it equally
-  supports "every non-overlay row has a *distinct* ISIN", which would make cross-series same-security
-  pairs share ISINs (contradicting Q3's open design question). The two readings have opposite identity
-  implications; the aggregate evidence cannot yet separate them. Left open deliberately.
+- D02-D4's deficit relation is compatible with **two different identity regimes**. If `isin_count`
+  counts distinct non-blank ISINs (reading (a)), then all non-overlay rows carry present ISINs that are
+  pairwise distinct within each file, and BL/T0 rows either duplicate a base-security ISIN or are blank —
+  indistinguishable from each other in this evidence. If `isin_count` counts non-blank rows
+  (reading (b)), the data shows only that BL/T0 rows are the blank ones; non-overlay ISIN *duplication*
+  within a day could then exist without surfacing. The readings have opposite implications for ISIN
+  uniqueness (D02-Q3), and the aggregate evidence cannot separate them. Left open deliberately;
+  FIX-SEM-DEF-01 plus the census fixtures resolve it.
 
 ## 12. Disposition — D03 readiness
 
 - **D02 conclusions (investigation):** equity eligibility *cannot* be a single-field predicate
   (D02-D1/D3); the series universe is now mapped, provisionally classified, and lifecycle-profiled
-  (§3); identity semantics split cleanly into durable (ISIN), source-specific (FinInstrmId — opaque),
-  alias (symbol), and state (series) roles (§4); cross-format continuity is *aggregate-supported* via
-  ISIN but unproven at record level (§5); Legacy has no name path and will need a governed security
-  master (§7); the canonical observation must carry dates-as-derived, overlay flags, and full provenance
-  (§8).
+  (§3); the available evidence supports a working role separation — strongest-durable-identity-candidate
+  (ISIN; durability/validity/uniqueness/continuity unproven pending D03), source-specific identifier
+  (FinInstrmId — opaque), time-varying alias (symbol), potentially time-varying dated
+  classification/state (series) — as a *proposal for D03 to test*, not a decision (§4); cross-format
+  continuity is *aggregate-supported* via ISIN but unproven at record level (§5); Legacy has no name
+  path and will likely need a governed security master (§7); the canonical observation must carry
+  dates-as-derived, overlay flags, and full provenance (§8).
 - **D02 is NOT a green light for D03 as an implementation gate.** It is a green light for **D03 as a
-  fixtures-and-decisions gate**: the twelve FIX-* requests in §9 (ten immediately executable read-only
-  on Windows; FIX-SECMASTER-01 authorization-gated) resolve, or deliberately freeze as accepted
-  limitations, the Q1–Q8 open questions. Eligibility classification may be **provisionally approved** at
-  that point (it is already complete for 167/172 codes); the 5 UNCLASSIFIED codes and the ST/IT
-  anomalies must have dispositions; D02-D4's two readings must be resolved before any identity fallback
-  rule is written.
+  fixtures-and-decisions gate**: the twelve FIX-* requests in §9 — **10 directly executable** (8 read-only
+  Windows archive scans + 2 published-evidence tasks), **1 provenance/semantic reconstruction**
+  (FIX-SEM-DEF-01, needing the D01 script or a minimal re-emission rather than a corpus scan), and
+  **1 authorization-gated** security-master scoping sample (FIX-SECMASTER-01) — resolve, or deliberately
+  freeze as accepted limitations, the Q1–Q8 open questions. Eligibility classification may be
+  **provisionally approved** at that point (it is already complete for 167/172 codes); the 5
+  UNCLASSIFIED codes, the ST distribution discontinuity / semantic-interpretation anomaly, and the IT
+  lifecycle question must have dispositions; D02-D4's two readings must be resolved before any identity
+  fallback rule is written.
 - If Windows fixtures cannot be produced, the fallback path is an explicitly-documented
   approximation ("Legacy-era equity universe = series-EQ superset including ETFs") — which this
   investigation recommends **against** accepting silently.
+
+## 13. Revision log
+
+**Rev 2 — pre-merge correction pass** (corrections only; no new conclusions, no removal of findings):
+
+| Item | Disposition |
+|---|---|
+| C1 | UDiFF header corrected to **34 fields**, verified against committed D01 `file_inventory.json` (`headers` length and `header_signature` split both = 34 for all 543 files). Record §1 (F2) and §9 (FIX-UD-ROW-SAMPLE-01) updated; fixture columns restated per format (UDiFF 34; Legacy 13 + trailing empty). |
+| C2 | §4.1 rewritten: ISIN framed as **currently strongest cross-format durable-identity candidate**, durability/validity/uniqueness/continuity explicitly unproven; linked to D02-Q1, D02-Q2, D02-Q3, FIX-XCONT-01, FIX-LEG-CENSUS-01, FIX-UD-CENSUS-01. §12 conclusion aligned. Finding that ISIN is the strongest candidate preserved. |
+| C3 | D02-D4/D5 and §11 rewritten: aggregate evidence **cannot distinguish** base-ISIN repetition from blank-ISIN on BL/T0 rows; same-day base/overlay ISIN duplication stated as **unproven**. |
+| C4 | §9/§12 fixture classification made explicit: **10 directly executable** (8 Windows read-only scans + 2 published-evidence tasks: FIX-CAL-01, FIX-CIRC-01), **1 provenance/semantic reconstruction** (FIX-SEM-DEF-01), **1 authorization-gated** (FIX-SECMASTER-01). All 12 fixtures retained. |
+| C5 | D02-D9 reworded: series treated as **potentially time-varying dated classification/state pending row-level transition evidence**; per-security transitions no longer described as demonstrated; the prohibition on using series as immutable identity retained. |
+| C6 | ST finding retained with corrected epistemic status: **distribution discontinuity / semantic-interpretation anomaly** (≈16.9→124.7 rows/day), *not* a proven semantic break (§3 D02-D7, §10.4, §12). FIX-UD-CENSUS-01 and FIX-SERIES-EVENTS-01 remain the resolving evidence. |
+| C7 | FIX-UD-ROW-SAMPLE-01 (and FIX-OVERLAY-SEM-01) now explicit about spanning **both formats**; 2024-03-28 re-labeled as its true Legacy-era date (kept, not moved); FIX-SECMASTER-01 references "sample dates (both eras)". |
+| C8 | §10.6 holiday characterization removed; neutral statement + observed facts only (2,616 rows / 1,813 EQ / 313 BL / internal `03-OCT-2022`); dating correctness explicitly *not* decided; FIX-CAL-01 unchanged. |
+| C9 | §8 `security_id` row rewritten: **proposed durable internal identity concept; resolution strategy pending D03**; `security_id = ISIN` explicitly not assumed; ISIN kept as strongest input candidate. |
+| extra | Two internal-reference precision fixes found during review: dangling `FIX-ISIN-SEM-01` → real fixtures (FIX-SYMBOL-HIST-01/FIX-UD-CENSUS-01 vs FIX-XCONT-01); `FIX-CENSUS-01` → `FIX-LEG-CENSUS-01 / FIX-UD-CENSUS-01`. Derived-CSV classification `basis` strings regenerated to match (counts, classes, rows unchanged — text only). |
+| extra-2 | Regeneration determinism defect found and fixed in `d02_derivation.py`: tie-ordering in two tables depended on Python set iteration order (unstable across hash seeds). Sort keys now include a stable secondary key; verified byte-identical output under `PYTHONHASHSEED` variation. Row *content* of the two affected CSVs is unchanged vs Rev 1 (only tie row order was restabilized); no metric in `d02_metrics.json`, `d02_anomalies.json`, `d02_series_class_rollup.csv`, or `d02_missing_weekdays.txt` changed. |
 
 *End of D02 record. Produced under read-only investigation authority; all RECOMMENDATION items are
 proposals pending approval at a later gate.*
