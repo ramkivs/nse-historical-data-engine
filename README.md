@@ -186,12 +186,19 @@ Current stage:
 
 
 
-\*\*D01 evidence baseline complete; D02 read-only equity eligibility & identity investigation complete (investigation record only — no implementation authority).\*\*
+\*\*D01 evidence baseline complete; D02 identity/eligibility investigation complete; D03 COMPLETE — Windows corpus execution published (evidence/d03/windows_run @ origin/main 094105b, 39 files, determinism PASS, post-run reconciliation in D03 record §15); D04 canonical-model decision investigation record committed; DEC-1/DEC-2 documented (D04B record + evidence/d04/); D05 CANONICAL MODEL SPECIFICATION authored (docs/specs/D05_CANONICAL_MODEL_SPEC.md) — all investigation/specification-only, no implementation authority.\*\*
 
 
 
 - D02 investigation record: `docs/investigations/D02_EQUITY_ELIGIBILITY_AND_IDENTITY.md`
 - D02 derived evidence artifacts: `evidence/identity/` (regenerate read-only with `python3 evidence/identity/d02_derivation.py`)
+- D03 investigation record: `docs/investigations/D03_BOUNDED_FIXTURE_INVESTIGATION.md`
+- D03 fixture tool (read-only, deterministic, selftested): `tools/d03_fixture_scan/` — Windows runbook in D03 record §12
+- D03 Arena-side partial evidence: `evidence/d03/` (regenerate read-only with `python3 evidence/d03/d03_arena_evidence.py`)
+- D03 Windows run evidence (durable on main): `evidence/d03/windows_run/` (RUN_INFO + MANIFEST; verify: `python tools/d03_fixture_scan/d03_fixtures.py verify --out evidence/d03/windows_run` — see D03 §15 CRLF packaging note)
+- D04 investigation record (decision inputs only; no schema adopted): `docs/investigations/D04_CANONICAL_MODEL_DECISION_INVESTIGATION.md`
+- D04B DEC-1/DEC-2 investigation record (official documentation + security-master scoping): `docs/investigations/D04B_DEC12_DOCUMENTATION_AND_MASTER_INVESTIGATION.md`; machine-readable evidence `evidence/d04/` (deterministic: `python3 evidence/d04/d04_arena_synthesis.py`)
+- D05 canonical model specification (specification-only; ADOPTED/DEFERRED/OPEN/NON-ASSUMPTION tagged): `docs/specs/D05_CANONICAL_MODEL_SPEC.md`
 
 
 

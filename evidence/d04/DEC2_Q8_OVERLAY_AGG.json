@@ -1,0 +1,22 @@
+{
+  "bo_status": "BO (buyback) lt only (112): buyback tenders are not exchange-market volume at all; treated as separate event rows; inclusion question moot in-corpus.",
+  "governance": "Spec may record BL/IL disjointness as EVIDENCE-BACKED (observation + official definition); T0 stays OPEN; no aggregate rule may silently sum or drop overlay rows without the flag.",
+  "input_hash": {
+    "FIX-OVERLAY-SEM-01__per_overlay_row.csv": "a3c73b4323574bedc25f34fba65f4a144b1e17f1700925884962aba345675cf6"
+  },
+  "orphans": {
+    "BL": 3,
+    "IT": 333
+  },
+  "per_row_published_rows": 3692,
+  "qty_rel_vs_same_day_base_row_for_same_isin": {
+    "BL|gt": 1037,
+    "BL|lt": 1766,
+    "BO|lt": 112,
+    "IL|gt": 23,
+    "IL|lt": 181,
+    "T0|lt": 237
+  },
+  "superset_argument": "Where overlay volume were INCLUDED in the normal-market row aggregate, every overlay row would satisfy overlay_qty <= base_row_qty. Observed: BL qty > base qty in 1037 rows and IL > base in 23 rows \u2014 inclusion is impossible for those rows. Combined with the official segment definitions (BL/IL are separate market windows; 'number of trades' field defined as normal market only), the evidence supports DISJOINT markets for BL/IL: overlay rows ADD to base totals (no double counting).",
+  "t0_status": "T0 rows: qty always < base (237/237) \u2014 consistent with both disjoint-window and included models; T0 inclusion semantics NOT established (documentation remains: T+0 FAQ says separate series; FAQ does not address totals). Remains OPEN."
+}

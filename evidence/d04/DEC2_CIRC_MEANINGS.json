@@ -1,0 +1,20 @@
+{
+  "documented_now": {
+    "BE": "Trade-for-Trade (surveillance) \u2014 mainboard T2T securities trade under BE (NSE/SURV/74008; ref 33844/58561). Dual use with Rights Entitlement (legend 2024) still needs row-level disambiguation; EQ<->BE round-trips (5738/5653) are now explained as surveillance entries/exits.",
+    "BL": "Block-deal window trades ('odd lot market BL series' per NSE/CMTR/7864; block window per inter-institutional page).",
+    "ESM": "2026 ESM applicability circular: qualifying securities SHIFT from EQ/SM to BE/ST \u2014 the official movement mechanism for the transition pairs D03 measured.",
+    "IL": "Inter-institutional deals window (institutional-only, FII ceiling management); DISCONTINUED w.e.f. 2018-07-01 per NSE/CMTR/37880 \u2014 consistent with corpus IL span ending 2018-06.",
+    "SM": "SME rolling settlement series (official NSE EMERGE page).",
+    "SO": "SME odd-lot market series (official NSE EMERGE page: 'series for odd lot market is SO, market O').",
+    "ST": "SME Trade-for-Trade (official NSE EMERGE page) \u2014 SM<->ST round-trips (869/1368) mirror mainboard EQ<->BE surveillance moves.",
+    "T0": "Optional T+0 settlement series (D02 E3 FAQ) \u2014 settlement-state variant of same security; separate bhavcopy series; first corpus sighting 2024-03-28 matches the Mar-2024 pilot."
+  },
+  "registry_ref": "see evidence/d04/DEC2_CAL_LABELS.json provenance + CIRCULARS registry in d04_arena_synthesis.py",
+  "retroactivity_rule": "definitions above carry the dates of their sources; do NOT apply 2024+ legend/ESM framework text to 2016-2023 semantics beyond noting consistency",
+  "still_open": {
+    "HA-HE": "not in current legend; retrieval not attempted (no corpus impact)",
+    "IT": "institutional-window rows w/o same-day base (333 orphans incl UDiFF 4) consistent with block/institutional venue trades; NO authoritative series definition obtained \u2014 stays FROZEN",
+    "SF": "no official definition obtained this session; corpus span 2025-10..11 (D02); remains UNCLASSIFIED",
+    "legacy-era BE rights-vs-T2T split rule": "needs row evidence (RE-prefix heuristic stays evidence-only)"
+  }
+}

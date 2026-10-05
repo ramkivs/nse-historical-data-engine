@@ -1,0 +1,18 @@
+{
+  "acquisition_status": {
+    "etf_register_fetch": "attempted 2026-10-06 via sandbox fetch: HTTP 500; sandbox network egress to nseindia blocked for direct downloads (curl TLS failure recorded). Content confirmed present via search index (real rows). ACQUISITION NOT COMPLETED from Arena.",
+    "masters_monthly_files": "documented path pattern (\u2026/Masters/YYYY/Mon/YYYYMMDD.gz); binary .gz; same egress limitation; not acquired",
+    "next_step": "Windows-side download with the same read-only discipline as the corpus (record URL, date, sha256 per file; store under a NEW directory outside the archive roots; no retro-writes). Then a bounded join fixture (design: FIX-ETF-JOIN-02) computes EQ\u2229ETF-ISIN counts per file."
+  },
+  "authoritative_candidate_identified": {
+    "etf_register": "eq_etfseclist.csv (nsearchives) \u2014 official ETF master (Symbol, Underlying, SecurityName, DateofListing, MarketLot, ISINNumber, FaceValue). Directly resolves the EQ-contains-ETFs eligibility ambiguity by ISIN membership.",
+    "masters_database": "NSE 'Masters' historical database: monthly point-in-time snapshots (end of prior month) keyed symbol+series with ISIN, Name, Deleted flag \u2014 per official NSE historical-dissemination document. Would provide HISTORICAL temporal behavior, listing/delisting markers, and era coverage \u2014 the exact missing capability."
+  },
+  "authority_disposition": "SECURITY MASTER NOT treated as authoritative for identity/eligibility merely because acquired: authority requires (i) provenance capture per file, (ii) consistency test against corpus (symbol/series/ISIN agreement at overlapping dates), (iii) explicit user acceptance of its role. Until then: cross-check source, not source of truth.",
+  "authorization": "GRANTED (DEC-1) for investigation/acquisition-of-evidence only",
+  "can_it_establish_historical_eligibility_identity": {
+    "answer": "YES-partially, on documentation: monthly Masters snapshots + ETF register give era-correct symbol/series/ISIN/deleted facts and complete ETF membership \u2192 eligibility disambiguation and listing-date semantics become decidable; NO for any claim that master fields redefine exchange-level identity semantics (that remains governance).",
+    "evidence": "official NSE historical-data document field definitions; D03 corpus consistency facts (7,633 ISINs; zero blanks; boundary 205 one-sided rows are exactly what dated masters would adjudicate as listing/delisting vs defect)"
+  },
+  "no_assumption_recorded": true
+}

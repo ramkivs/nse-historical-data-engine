@@ -1,0 +1,27 @@
+{
+  "fixture_id": "FIX-SECMASTER-01",
+  "title": "NSE security master (Scrip master / listing info) acquisition \u2014 scoping only",
+  "status": "GATED \u2014 NOT EXECUTED, NOT EXECUTABLE IN D03",
+  "date_recorded": "2026-10-05",
+  "gate": {
+    "type": "explicit user authorization required",
+    "reason": "Fixtures in D03 are derived from the already-acquired read-only corpus. Pulling an additional external dataset (NSE security master / listing information) changes the acquisition scope and creates new downloaded files outside both archive roots. D03 SHALL NOT acquire it; D02 §12 rule carried forward.",
+    "what_would_be_needed": [
+      "user decision on source (NSE archive equity_master / bhavcopy-summary files), date (point-in-time vs per-date), and storage location",
+      "same read-only + provenance discipline as archives (fetch log, sha256 per file, no modification of corpus)"
+    ]
+  },
+  "what_this_fixture_would_unlock_if_authorized": [
+    "authoritative equity-vs-ETF disambiguation inside SERIES==EQ (a cross-membership count against it (deliberately NOT implemented in FIX-LEG-CENSUS-01, which stays corpus-only))",
+    "listing/delisting dates to test whether isin_only_udiff (FIX-XCONT-01) equals new listings rather than data defects",
+    "company-name linkage to test symbol-change (rename) rows from FIX-SYMBOL-HIST-01 against an external register",
+    "segment membership (mainboard/SME) to validate the D02 provisional series classes independently"
+  ],
+  "partial_alternatives_without_acquisition": [
+    "FIX-UD-CENSUS-01: row-level FinInstrmTp census (EQIT vs ETUF etc.) is an in-corpus eligibility discriminator \u2014 may remove most dependency on the master",
+    "FIX-UD-ROW-SAMPLE-01: ETF-ticker rows (NIFTYBEES/GOLDBEES pattern) give row-level hints inside SERIES==EQ",
+    "RE-prefix / RE-dash symbol evidence in FIX-LEG-CENSUS-01 for rights-entitlement identification (caution: evidence only, not classification)"
+  ],
+  "decision_needed_from": "user (acquisition authorization) + D04 gate (whether eligibility rules may depend on any external dataset at all)",
+  "record_reference": "docs/investigations/D03_BOUNDED_FIXTURE_INVESTIGATION.md sections 4, 10"
+}

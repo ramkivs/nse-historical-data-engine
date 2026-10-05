@@ -1,0 +1,68 @@
+ok   validate_isin valid                                        'VALID'
+ok   validate_isin bad checkdigit                               'INVALID_CHECKDIGIT'
+ok   validate_isin blank                                        'BLANK'
+ok   file set equal                                             True
+ok   determinism: byte-identical rerun                          True
+verify: OK
+ok   manifest verify                                            0
+ok   semdef rows                                                10
+ok   semdef blank_isin                                          2
+ok   semdef distinct_isin                                       7
+ok   semdef nonblank_rows                                       8
+ok   semdef dup_extra                                           1
+ok   semdef distinct_sym                                        5
+ok   semdef pairs                                               8
+ok   semdef pair_dupes                                          2
+ok   semdef d01 matches distinct                                'True'
+ok   semdef d01 != nonblank rows                                'False'
+ok   census EQ rows                                             6
+ok   census EQ blank isin                                       1
+ok   census T0 rows                                             1
+ok   census fid_eq isin rows (EQ)                               1
+ok   census ETUF group present                                  1
+ok   header width verdict                                       True
+ok   header width 34                                            {'34': 2}
+ok   xcont matched                                              3
+ok   xcont only_legacy                                          2
+ok   xcont only_udiff                                           5
+ok   xcont symbol changes                                       1
+ok   xcont series changes                                       1
+ok   xcont chain eq                                             2
+ok   xcont chain ne                                             1
+ok   xcont udiff blank isin rows                                2
+ok   overlay LEG BL by symbol                                   1
+ok   overlay LEG BL same isin                                   1
+ok   overlay LEG T0 orphan                                      1
+ok   overlay UD BL by symbol                                    1
+ok   overlay UD T0 same isin                                    1
+ok   overlay UD IT orphan                                       1
+ok   overlay xyz qty rel lt                                     'lt'
+ok   overlay xyz close rel eq                                   'eq'
+ok   overlay xyz isin cmp                                       'isin_eq'
+ok   symbolhist multi_symbol                                    True
+ok   symbolhist WIPRO symbol-change row                         True
+ok   symbolhist X1 transitions (IRRCON->RELIANCE)               True
+ok   seriesevents EQ->ST count                                  1
+ok   seriesevents BL/EQ same-day cooc                           1
+ok   seriesevents EQ/T0 same-day cooc                           1
+ok   anom 2017-07-10 header fields                              13
+ok   anom 2017-07-07 header fields (neighbor)                   14
+ok   anom 2020-07-13 timestamp format                           {'DD-Mon-YY_2digit_year': 1}
+ok   anom window includes neighbors                             True
+ok   rowsample udiff 0708 exact                                 'exact'
+ok   rowsample udiff biz date dynamic                           '2024-07-08'
+ok   rowsample udiff max BL                                     1
+ok   rowsample legacy 2024-07-05 exact                          'exact'
+ok   rowsample absent classes recorded                          True
+ok   rowsample ETF hint found                                   True
+ok   rowsample TradDt!=BizDt covered                            True
+ok   legcensus L1 blanks                                        2
+ok   legcensus L1 RE prefix rows (broad)                        4
+ok   legcensus L1 RE-dash rows                                  1
+ok   legcensus L1 exact RE rows                                 0
+ok   legcensus L1 pair dups                                     2
+ok   legcensus L1 invalid isins                                 0
+ok   rowsample file header verbatim                             ['TradDt', 'BizDt', 'Sgmt', 'Src', 'FinInstrmTp', 'FinInstrmId', 'ISIN', 'TckrSymb', 'SctySrs']
+ok   rowsample bounded <=2000                                   True
+
+SELFTEST: ALL CHECKS PASSED (synthetic data; no corpus involved)

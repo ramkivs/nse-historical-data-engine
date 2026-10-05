@@ -1,0 +1,54 @@
+{
+  "distinct_signature_counts": {
+    "LEGACY": 2,
+    "UDIFF": 1
+  },
+  "expected": {
+    "LEGACY": 14,
+    "UDIFF": 34,
+    "note": "Legacy 14 = 13 named fields + one trailing empty field in the header line"
+  },
+  "interpretation": "All 543 UDiFF files present exactly one 34-field header signature (no intra-corpus UDiFF header variant). Two Legacy files carry a 13-field header (no trailing empty field): these match the header_variant entries in the D02 anomaly register. Field ORDER/identity for UDiFF is a single signature for all files, so the column layout is stable across the whole 2024-07-08..2026-09-18 span as recorded by D01.",
+  "method": "len(headers) of every file's stored D01 header_signature; verifies D01's recorded width, does not rescan raw archives",
+  "nonconforming_files": [
+    {
+      "file_name": "cm10JUL2017bhav.csv.zip",
+      "format": "LEGACY",
+      "header_field_count": 13,
+      "header_signature": "SYMBOL|SERIES|OPEN|HIGH|LOW|CLOSE|LAST|PREVCLOSE|TOTTRDQTY|TOTTRDVAL|TIMESTAMP|TOTALTRADES|ISIN"
+    },
+    {
+      "file_name": "cm13JUL2020bhav.csv.zip",
+      "format": "LEGACY",
+      "header_field_count": 13,
+      "header_signature": "SYMBOL|SERIES|OPEN|HIGH|LOW|CLOSE|LAST|PREVCLOSE|TOTTRDQTY|TOTTRDVAL|TIMESTAMP|TOTALTRADES|ISIN"
+    }
+  ],
+  "observed": {
+    "LEGACY": {
+      "13": {
+        "files": 2
+      },
+      "14": {
+        "files": 1917
+      }
+    },
+    "UDIFF": {
+      "34": {
+        "files": 543
+      }
+    }
+  },
+  "open_gap": "Semantic confirmation that all 34 positions match the current UDiFF specification requires the Windows fixture (header_signature string is compared there against the full specification list).",
+  "provenance": {
+    "clock_used": false,
+    "deterministic": true,
+    "generator": "evidence/d03/d03_arena_evidence.py",
+    "inputs": [
+      {
+        "path": "/home/user/nse-historical-data-engine/evidence/inventory/file_inventory.json",
+        "sha256": "336b9531cd34f48e9a2e7e7593cc4e9c2736b3864d8213bc65d6ab8b488729d2"
+      }
+    ]
+  }
+}

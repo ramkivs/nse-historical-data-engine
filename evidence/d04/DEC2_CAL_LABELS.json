@@ -1,0 +1,194 @@
+{
+  "coverage_note": "2026 CM circular excerpt obtained listed only weekend-falling addenda; the F&O sibling circular (same notification date, common exchange holiday set) lists the weekday dates; alignment below uses that set",
+  "explained": 29,
+  "files_present_on_circular_holiday": [
+    {
+      "bhav_file": "PRESENT",
+      "holiday_per_circular": "2025-10-21",
+      "note": "2025-10-21: Muhurat special session (NSE/FAOP/70320); file row_count normal-scale per D01 inventory"
+    }
+  ],
+  "governance_rule": "Calendar model MUST treat file-presence as the trading-session signal and annual circulars as labels: both directions of divergence are observed (2024-11-01 Diwali no file; 2025-10-21 circular-holiday WITH a normal-scale file due to the special session; 2025-10-20 file-absent though not in the annual list).",
+  "per_missing_day": [
+    {
+      "circular": "Moharram",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2024-07-17"
+    },
+    {
+      "circular": "Independence Day",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2024-08-15"
+    },
+    {
+      "circular": "Mahatma Gandhi Jayanti",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2024-10-02"
+    },
+    {
+      "circular": "Diwali Laxmi Pujan",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2024-11-01"
+    },
+    {
+      "circular": "Gurunanak Jayanti",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2024-11-15"
+    },
+    {
+      "circular": "",
+      "label": "UNEXPLAINED-BY-OBTAINED-CIRCULARS",
+      "missing_date": "2024-11-20"
+    },
+    {
+      "circular": "Christmas",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2024-12-25"
+    },
+    {
+      "circular": "2025-02-26",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2025-02-26"
+    },
+    {
+      "circular": "2025-03-14",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2025-03-14"
+    },
+    {
+      "circular": "2025-03-31",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2025-03-31"
+    },
+    {
+      "circular": "2025-04-10",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2025-04-10"
+    },
+    {
+      "circular": "2025-04-14",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2025-04-14"
+    },
+    {
+      "circular": "2025-04-18",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2025-04-18"
+    },
+    {
+      "circular": "2025-05-01",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2025-05-01"
+    },
+    {
+      "circular": "2025-08-15",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2025-08-15"
+    },
+    {
+      "circular": "2025-08-27",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2025-08-27"
+    },
+    {
+      "circular": "2025-10-02",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2025-10-02"
+    },
+    {
+      "circular": "",
+      "label": "UNEXPLAINED-BY-OBTAINED-CIRCULARS",
+      "missing_date": "2025-10-20"
+    },
+    {
+      "circular": "2025-10-22",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2025-10-22"
+    },
+    {
+      "circular": "2025-11-05",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2025-11-05"
+    },
+    {
+      "circular": "2025-12-25",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2025-12-25"
+    },
+    {
+      "circular": "",
+      "label": "UNEXPLAINED-BY-OBTAINED-CIRCULARS",
+      "missing_date": "2026-01-15"
+    },
+    {
+      "circular": "NSE/FAOP/71777 weekday",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2026-01-26"
+    },
+    {
+      "circular": "NSE/FAOP/71777 weekday",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2026-03-03"
+    },
+    {
+      "circular": "NSE/FAOP/71777 weekday",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2026-03-26"
+    },
+    {
+      "circular": "NSE/FAOP/71777 weekday",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2026-03-31"
+    },
+    {
+      "circular": "NSE/FAOP/71777 weekday",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2026-04-03"
+    },
+    {
+      "circular": "NSE/FAOP/71777 weekday",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2026-04-14"
+    },
+    {
+      "circular": "NSE/FAOP/71777 weekday",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2026-05-01"
+    },
+    {
+      "circular": "NSE/FAOP/71777 weekday",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2026-05-28"
+    },
+    {
+      "circular": "NSE/FAOP/71777 weekday",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2026-06-26"
+    },
+    {
+      "circular": "NSE/FAOP/71777 weekday",
+      "label": "OFFICIAL-HOLIDAY",
+      "missing_date": "2026-09-14"
+    }
+  ],
+  "provenance": {
+    "circular_registry_ids": [
+      "NSE/CMTR/59722",
+      "NSE/CMTR/61518",
+      "NSE/CMTR/65587",
+      "NSE/CMTR/71775",
+      "NSE/FAOP/71777",
+      "NSE/FAOP/70320"
+    ],
+    "inputs": {
+      "d02_missing_weekdays.txt": "fd9f6d619d516fb15992d36aa09fe79c0e2b05ff26625a15dea32f9f02118a34",
+      "file_inventory.json": "336b9531cd34f48e9a2e7e7593cc4e9c2736b3864d8213bc65d6ab8b488729d2"
+    }
+  },
+  "scope": "missing-weekday labeling for the UDiFF era years where official circulars were retrieved (2024-H2, 2025, 2026); Legacy-era years NOT labeled (deferred \u2014 not decision-relevant, D03 stopping rule)",
+  "unexplained": [
+    "2024-11-20",
+    "2025-10-20",
+    "2026-01-15"
+  ]
+}

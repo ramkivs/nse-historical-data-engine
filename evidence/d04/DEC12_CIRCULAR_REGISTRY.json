@@ -1,0 +1,153 @@
+{
+  "circulars": [
+    {
+      "date": "2023-12-12",
+      "excerpt_scope": "table items 1-14 weekdays + weekend addenda; full weekday list also includes July 17 2024 Moharram and Dec 25 Christmas (confirmed via retrieved content)",
+      "file": "https://nsearchives.nseindia.com/content/circulars/CMTR59722.pdf",
+      "id": "NSE/CMTR/59722",
+      "title": "Trading holidays for the calendar year 2024 (CM segment)"
+    },
+    {
+      "date": "2024-04-08",
+      "file": "https://nsearchives.nseindia.com/content/circulars/CMTR61518.pdf",
+      "id": "NSE/CMTR/61518",
+      "note": "in-partial-modification to NSE/CMTR/59722",
+      "title": "Trading holiday on May 20, 2024 on account of Parliamentary Elections"
+    },
+    {
+      "date": "2024-12-13",
+      "file": "https://nsearchives.nseindia.com/content/circulars/CMTR65587.pdf",
+      "id": "NSE/CMTR/65587",
+      "title": "Trading holidays for the calendar year 2025 (CM segment)",
+      "weekday_list": [
+        "2025-02-26",
+        "2025-03-14",
+        "2025-03-31",
+        "2025-04-10",
+        "2025-04-14",
+        "2025-04-18",
+        "2025-05-01",
+        "2025-08-15",
+        "2025-08-27",
+        "2025-10-02",
+        "2025-10-21",
+        "2025-10-22",
+        "2025-11-05",
+        "2025-12-25"
+      ]
+    },
+    {
+      "date": "2025-12-12",
+      "file": "https://nsearchives.nseindia.com/content/circulars/CMTR71775.pdf",
+      "id": "NSE/CMTR/71775",
+      "note": "retrieved excerpt showed only the Saturday/Sunday-falling addenda",
+      "title": "Trading Holidays for Calendar Year 2026 (CM segment)"
+    },
+    {
+      "date": "2025-12-12",
+      "file": "https://nsearchives.nseindia.com/content/circulars/FAOP71777.pdf",
+      "id": "NSE/FAOP/71777",
+      "title": "Trading holidays for the calendar year 2026 (F&O segment)",
+      "weekday_list": [
+        "2026-01-26",
+        "2026-03-03",
+        "2026-03-26",
+        "2026-03-31",
+        "2026-04-03",
+        "2026-04-14",
+        "2026-05-01",
+        "2026-05-28",
+        "2026-06-26",
+        "2026-09-14",
+        "2026-10-02",
+        "2026-10-20",
+        "2026-11-10",
+        "2026-11-24",
+        "2026-12-25"
+      ]
+    },
+    {
+      "date": "2025-09-22",
+      "file": "https://nsearchives.nseindia.com/content/circulars/FAOP70320.pdf",
+      "id": "NSE/FAOP/70320",
+      "note": "all trades settle; relevant to the 2025-10-21 file existence",
+      "title": "Muhurat Trading session on account of Diwali (special live session Tuesday 2025-10-21, normal market 13:45-14:45)"
+    },
+    {
+      "date": "2006-09-13",
+      "file": "https://archives.nseindia.com/content/circulars/cmtr7864.htm",
+      "id": "NSE/CMTR/7864",
+      "key_fact": "block deals = trades executed in the odd lot market 'BL' series; bulk computation combines BL-series and normal-market client combinations ONLY for reporting",
+      "title": "Automation of Bulk/Block deals data"
+    },
+    {
+      "date": "2026-04-30",
+      "file": "https://nsearchives.nseindia.com/content/circulars/SURV74008.pdf",
+      "id": "NSE/SURV/74008",
+      "key_facts": [
+        "T2T segment scrips trade under BE series (ref NSE/SURV/33844 2016-12-19; NSE/SURV/58561 2023-09-25)",
+        "GSM stages II-IV = Trade for Trade; ESM stage I = 100% margin + T2T w/ price bands",
+        "illiquid-securities turnover computation considers trades across EQ, BE, BT, IL and BL series",
+        "E1/W1 etc. are equity-linked non-common (partly-paid/warrants), excluded from illiquid shortlist"
+      ],
+      "title": "Surveillance and Investigation Consolidated Circular"
+    },
+    {
+      "date": "2018-05-30",
+      "file": "cited-on: https://www.nseindia.com/static/products-services/equity-market-segment",
+      "id": "NSE/CMTR/37880",
+      "key_fact": "IL = inter-institutional deals segment window (institutional-only; FII ceiling management), trades settled under market type 'N', series IL \u2014 a SEPARATE market segment from normal market",
+      "title": "Trading in IL series discontinued w.e.f 2018-07-01 (CM segment)"
+    },
+    {
+      "date": "accessed 2026-10-06",
+      "file": "https://www.nseindia.com/static/products-services/emerge-sme-market-segment",
+      "id": "NSE-EMERGE-PAGE",
+      "key_facts": [
+        "SME rolling settlement securities trade under SM series",
+        "SME Trade-for-Trade securities trade under ST series",
+        "odd-lot market on SME uses series SO, market type O"
+      ],
+      "title": "Market Sub-Segments (SME)"
+    },
+    {
+      "date": "2026-01-14",
+      "file": "cited-in-search: NSE ESM applicability circular (Jan 2026)",
+      "id": "NSE-ESM-2026",
+      "key_fact": "securities under ESM shifted from rolling settlement segment (series EQ/SM) to trade-for-trade segment (series BE/ST) \u2014 official movement mechanism for the EQ<->BE / SM<->ST transitions measured in D03",
+      "title": "ESM framework"
+    },
+    {
+      "date": "accessed 2026-10-06",
+      "file": "https://www.nseindia.com/products/content/equities/equities/inter_inst_deals.htm",
+      "id": "NSE-INTER-INST-PAGE",
+      "key_facts": [
+        "block deal window: minimum order Rs 10 crore; trades settled under market type 'N', series 'BL'; T+2 rolling, compulsory demat",
+        "inter-institutional segment: institutional-only, FII sell-side restriction; settlement type N, series IL"
+      ],
+      "title": "Inter-Institutional Deals and Block Deals"
+    },
+    {
+      "date": "accessed 2026-10-06",
+      "file": "https://archives.nseindia.com/content/press/Data_details_CM.pdf",
+      "id": "NSE-DATA-HIST-DOC",
+      "key_facts": [
+        "Masters database: monthly snapshot (end of preceding month) with fields ISIN, Symbol, Series, Name, Deleted flag \u2014 historical coverage from the late 1990s",
+        "field definitions: Number of trades = normal market only (excludes auction market); Value of shares traded = rupee value; VWAP = field9/field8",
+        "'Once a symbol and a series have been specified, a security is uniquely known' (Masters-based unique key in that document's model)"
+      ],
+      "title": "Historical Data Dissemination of Capital Market Segment from NSE"
+    },
+    {
+      "date": "accessed 2026-10-06",
+      "file": "https://nsearchives.nseindia.com/content/equities/eq_etfseclist.csv",
+      "id": "NSE-ETF-MASTER",
+      "note": "official complete ETF register incl. ISINs \u2014 the DEC-1 disambiguation key for EQ-vs-ETF; direct fetch from sandbox returned HTTP 500; content verified via search index (real rows incl. NIFTYBEES)",
+      "schema": "Symbol,Underlying,SecurityName,DateofListing,MarketLot,ISINNumber,FaceValue",
+      "title": "ETF securities master list"
+    }
+  ],
+  "deterministic": true,
+  "generated_by": "evidence/d04/d04_arena_synthesis.py",
+  "note": "Recorded official-documentation registry; fetch date 2026-10-06; excerpts as retrieved; not corpus evidence"
+}

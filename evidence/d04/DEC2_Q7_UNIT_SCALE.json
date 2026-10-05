@@ -1,0 +1,35 @@
+{
+  "finding": "No sample row in either era shows lakh scaling; value columns are rupee totals consistent with qty x VWAP. Q7 unit question upgraded: value fields = rupees (sample+definition supported). Still no embedded units metadata in files \u2014 provenance note required by spec regardless.",
+  "input_hashes": {
+    "FIX-UD-ROW-SAMPLE-01__sample_legacy_2016-09-20.csv": "27cfbfd817ec029ca014eefb705e2fecab43ae0e0180f02c7504b1c30d4cdd91",
+    "FIX-UD-ROW-SAMPLE-01__sample_legacy_2022-10-03.csv": "3c3bda913666e0a9901f8e01e2e012b0d91e1d09f067a6ffe0993c4aa527c8d8",
+    "FIX-UD-ROW-SAMPLE-01__sample_legacy_2024-07-05.csv": "c525a3212f2bd98c6f86953efa344d6c46d5a854df34a10ea72c96a0a596a625",
+    "FIX-UD-ROW-SAMPLE-01__sample_udiff_2024-07-08.csv": "74ffb505ef9ed20c9651b8c5445bbf16fbb49870077826b057447ab203f90c24"
+  },
+  "legacy_2016-09-20": {
+    "other_vwap_differs_from_close": 12,
+    "rows_tested": 217,
+    "value_equals_lakhs_scaled": 0,
+    "value_equals_qty_times_close_within_2pct": 205
+  },
+  "legacy_2022-10-03": {
+    "other_vwap_differs_from_close": 23,
+    "rows_tested": 414,
+    "value_equals_lakhs_scaled": 0,
+    "value_equals_qty_times_close_within_2pct": 391
+  },
+  "legacy_2024-07-05": {
+    "other_vwap_differs_from_close": 28,
+    "rows_tested": 466,
+    "value_equals_lakhs_scaled": 0,
+    "value_equals_qty_times_close_within_2pct": 438
+  },
+  "method": "For each published stratified row sample, TOTTRDVAL/TtlTrfVal compared to qty*close (2% tolerance; residual rows = legitimate VWAP-vs-close gaps, e.g. strong intraday moves)",
+  "official_definition": "NSE Historical Data Dissemination doc: 'Value of shares traded = the rupee value of all shares traded in the day; VWAP = field9/field8'; 'Number of trades = normal market only (excludes auction market)'",
+  "udiff_2024-07-08": {
+    "other_vwap_differs_from_close": 28,
+    "rows_tested": 492,
+    "value_equals_lakhs_scaled": 0,
+    "value_equals_qty_times_close_within_2pct": 464
+  }
+}
