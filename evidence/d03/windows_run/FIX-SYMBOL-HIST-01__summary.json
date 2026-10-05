@@ -1,0 +1,18 @@
+{
+  "blank_isin_stats_by_format": {
+    "LEGACY": {
+      "blank_isin_rows": 0,
+      "rows": 3989299
+    },
+    "UDIFF": {
+      "blank_isin_rows": 0,
+      "rows": 1700650
+    }
+  },
+  "distinct_tracked_isins": 7633,
+  "fully_stable_isins_summarized_not_listed": 4032,
+  "isins_with_multiple_base_series": 2431,
+  "isins_with_multiple_symbols": 845,
+  "isins_with_same_day_multi_series_rows": 3355,
+  "method": "timelines keyed by non-blank ISIN; overlay rows tracked but excluded from transition chain (they inform FIX-OVERLAY-SEM-01)"
+}

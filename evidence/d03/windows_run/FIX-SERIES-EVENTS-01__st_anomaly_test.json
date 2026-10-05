@@ -1,0 +1,6 @@
+{
+  "hypothesis_under_test": "D02 observed ST rows/day \u224816.9 (last 250 Legacy files) vs \u2248124.7 (first 250 UDiFF files). Competing explanations: usage shift for surveillance T2T reporting; semantic re-purposing under UDiFF; organic SME growth. Row tests: (1) ST same-day co-occurrence with SM/SZ/EQ for the same ISIN, (2) ST ISIN appearance in other series before/after transition.",
+  "interpretation_owner": "D03 record; this fixture emits evidence only.",
+  "st_same_day_cooccurrence_by_format": {},
+  "top_ST_cooccurrence_pairs": []
+}

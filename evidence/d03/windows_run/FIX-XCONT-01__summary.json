@@ -1,0 +1,23 @@
+{
+  "blank_isin_rows": {
+    "legacy": 0,
+    "udiff": 0
+  },
+  "isin_matched": 2692,
+  "isin_only_legacy": 83,
+  "isin_only_udiff": 122,
+  "legacy_rows": 2775,
+  "match_ratio": 0.929237,
+  "matched_series_changes": 8,
+  "matched_symbol_changes": 1,
+  "mechanical_verdict": "significant unexplained discontinuity \u2014 investigate",
+  "pair": {
+    "legacy": "cm05JUL2024bhav.csv.zip",
+    "udiff": "BhavCopy_NSE_CM_0_0_0_20240708_F_0000.csv.zip"
+  },
+  "price_chain_prev_close_eq_legacy_close": 2691,
+  "price_chain_prev_close_ne_legacy_close": 1,
+  "secondary_key_caution": "(SYMBOL,SERIES) secondary join is NOT a durable-identity claim.",
+  "secondary_symbol_series_pairs_common": 2684,
+  "udiff_rows": 2815
+}

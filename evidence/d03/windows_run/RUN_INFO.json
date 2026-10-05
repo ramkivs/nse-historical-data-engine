@@ -1,0 +1,99 @@
+{
+  "determinism": {
+    "frozen_time": "(live clock)",
+    "rng": "none",
+    "sort_keys": "explicit primary+secondary"
+  },
+  "files_by_kind": {
+    "LEGACY": 1919,
+    "UDIFF": 543
+  },
+  "fixtures": [
+    "FIX-SEM-DEF-01",
+    "FIX-UD-CENSUS-01",
+    "FIX-UD-ROW-SAMPLE-01",
+    "FIX-LEG-CENSUS-01",
+    "FIX-XCONT-01",
+    "FIX-SYMBOL-HIST-01",
+    "FIX-SERIES-EVENTS-01",
+    "FIX-OVERLAY-SEM-01",
+    "FIX-ANOM-01"
+  ],
+  "generated_utc": "2026-10-05T18:42:25+00:00",
+  "payload_files": [
+    "FIX-ANOM-01__report.json",
+    "FIX-LEG-CENSUS-01__per_file.csv",
+    "FIX-LEG-CENSUS-01__per_year.csv",
+    "FIX-LEG-CENSUS-01__summary.json",
+    "FIX-LEG-CENSUS-01__unusual_files_top100.csv",
+    "FIX-OVERLAY-SEM-01__aggregate.json",
+    "FIX-OVERLAY-SEM-01__per_overlay_row.csv",
+    "FIX-SEM-DEF-01__d01_definition_verdict.json",
+    "FIX-SEM-DEF-01__formula_definitions.json",
+    "FIX-SEM-DEF-01__metrics.csv",
+    "FIX-SERIES-EVENTS-01__focus_transitions.csv",
+    "FIX-SERIES-EVENTS-01__same_day_series_cooccurrence.csv",
+    "FIX-SERIES-EVENTS-01__st_anomaly_test.json",
+    "FIX-SERIES-EVENTS-01__transition_pair_counts.csv",
+    "FIX-SYMBOL-HIST-01__summary.json",
+    "FIX-SYMBOL-HIST-01__transitions.csv",
+    "FIX-UD-CENSUS-01__groups.csv",
+    "FIX-UD-CENSUS-01__header_width_check.json",
+    "FIX-UD-CENSUS-01__marginal_fininstrmtp.csv",
+    "FIX-UD-CENSUS-01__marginal_sctysrs.csv",
+    "FIX-UD-CENSUS-01__marginal_sgmt.csv",
+    "FIX-UD-CENSUS-01__marginal_src.csv",
+    "FIX-UD-ROW-SAMPLE-01__sample_legacy_2016-09-20.csv",
+    "FIX-UD-ROW-SAMPLE-01__sample_legacy_2022-10-03.csv",
+    "FIX-UD-ROW-SAMPLE-01__sample_legacy_2024-03-28.csv",
+    "FIX-UD-ROW-SAMPLE-01__sample_legacy_2024-07-05.csv",
+    "FIX-UD-ROW-SAMPLE-01__sample_udiff_2024-07-08.csv",
+    "FIX-UD-ROW-SAMPLE-01__sample_udiff_2025-07-14.csv",
+    "FIX-UD-ROW-SAMPLE-01__sample_udiff_2025-10-30.csv",
+    "FIX-UD-ROW-SAMPLE-01__sample_udiff_2026-08-25.csv",
+    "FIX-UD-ROW-SAMPLE-01__selection_and_coverage.json",
+    "FIX-XCONT-01__matched_series_changes.csv",
+    "FIX-XCONT-01__matched_symbol_changes.csv",
+    "FIX-XCONT-01__only_legacy_isins.csv",
+    "FIX-XCONT-01__only_udiff_isins.csv",
+    "FIX-XCONT-01__price_chain_mismatch.csv",
+    "FIX-XCONT-01__summary.json"
+  ],
+  "read_only": true,
+  "roots": {
+    "legacy": "C:\\IIPS_Data\\NSE_Legacy_Acquisition\\archives",
+    "udiff": "C:\\IIPS_Data\\NSE_CM_UDiFF_10Y\\archives"
+  },
+  "selection_criteria": {
+    "anomaly_targets": [
+      "2017-07-10",
+      "2020-07-13"
+    ],
+    "file_selection_rule": "exact date, else earliest on/after target (tie by name)",
+    "row_sample_legacy": [
+      "2016-09-20",
+      "2022-10-03",
+      "2024-03-28",
+      "2024-07-05"
+    ],
+    "row_sample_rule": "first 25 rows per series class in file order; +up to 200 special rows (RE*/ETF-hint/blank-ISIN/blank-FinInstrmId); merge; sort by original row index; cap <=2000/date",
+    "row_sample_udiff": [
+      "2024-07-08",
+      "2025-10-30",
+      "2026-08-25",
+      "+dynamic: max-BL date, first TradDt!=BizDt date"
+    ],
+    "sem_def_targets": [
+      "LEGACY|2016-09-20",
+      "LEGACY|2018-06-01",
+      "LEGACY|2020-07-13",
+      "LEGACY|2021-07-01",
+      "LEGACY|2022-10-03",
+      "LEGACY|2023-06-01",
+      "LEGACY|2024-07-05",
+      "UDIFF|2024-07-08"
+    ]
+  },
+  "tool_sha256": "d36924844a88ce40d9d5b2924062c095e4d243dc53963f71f64ccd7b53315291",
+  "tool_version": "d03-fixture-scan-1.1.0"
+}

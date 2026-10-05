@@ -1,0 +1,20 @@
+{
+  "counts_by_format_series_matchtype": {
+    "LEGACY|BL|BASE_SAME_ISIN": 1949,
+    "LEGACY|BL|NO_BASE_ORPHAN": 1,
+    "LEGACY|BO|BASE_SAME_ISIN": 112,
+    "LEGACY|IL|BASE_SAME_ISIN": 204,
+    "LEGACY|IT|NO_BASE_ORPHAN": 329,
+    "LEGACY|T0|BASE_SAME_ISIN": 28,
+    "UDIFF|BL|BASE_SAME_ISIN": 854,
+    "UDIFF|BL|NO_BASE_ORPHAN": 2,
+    "UDIFF|IT|NO_BASE_ORPHAN": 4,
+    "UDIFF|T0|BASE_SAME_ISIN": 209
+  },
+  "no_assumption": "This fixture does not classify overlays; it emits comparisons for both D02 readings.",
+  "reading_guidance": {
+    "BASE_BY_SYMBOL_ONLY + overlay isin blank": "supports D02-Q1 reading (b): overlay rows carry no ISIN",
+    "BASE_SAME_ISIN with isin_eq and qty_rel lt/eq": "consistent with overlay \u2282 or = base security record",
+    "NO_BASE_ORPHAN": "overlay without same-day base \u2014 independent listing candidate; investigate"
+  }
+}

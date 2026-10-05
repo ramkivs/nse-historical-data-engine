@@ -1,0 +1,7 @@
+{
+  "discriminating_files": 1078,
+  "match_distinct_nonblank": 1078,
+  "match_nonblank_rows": 0,
+  "note": "Verdict derived only from files where the two definitions differ; non-discriminating files cannot distinguish them.",
+  "verdict": "D01 isin_count == DISTINCT-NONBLANK"
+}

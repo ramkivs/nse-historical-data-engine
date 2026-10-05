@@ -1,0 +1,9 @@
+{
+  "etf_membership": "UNRESOLVED by design \u2014 external security master not acquired (D03 scope).",
+  "files_scanned": 1919,
+  "invalid_isin_categories": {
+    "INVALID_CHECKDIGIT": 215393,
+    "INVALID_LEN": 1
+  },
+  "re_prefix_caution": "RE-prefixed symbols are investigation evidence ONLY; rights-entitlement status is NOT inferred from the symbol prefix alone."
+}

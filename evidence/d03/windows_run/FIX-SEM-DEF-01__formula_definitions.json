@@ -1,0 +1,14 @@
+{
+  "formulas": {
+    "blank_isin_rows": "rows where ISIN is empty/whitespace-only",
+    "distinct_nonblank_isin": "count of unique ISIN values (whitespace-stripped, uppercased, non-blank)",
+    "distinct_nonblank_symbol": "count of unique non-blank symbols (stripped, uppercased)",
+    "distinct_symbol_series_pairs": "count of unique (symbol,series) pairs",
+    "isins_extra_duplicate_rows": "nonblank_isin_rows minus distinct_nonblank_isin",
+    "nonblank_isin_rows": "count of rows with non-blank ISIN (duplicates included)",
+    "rows": "count of data rows (header excluded)",
+    "symbol_series_duplicate_rows": "sum over pairs of (occurrences - 1)"
+  },
+  "note": "No D01 evidence is altered. This fixture only reconstructs and documents definitions.",
+  "reconstruction_rule": "D01 isin_count is DISTINCT-NONBLANK iff, on a discriminating file (duplicates or blanks present), d01_isin_count == distinct_nonblank_isin; it is NONBLANK-ROWS iff == nonblank_isin_rows."
+}
