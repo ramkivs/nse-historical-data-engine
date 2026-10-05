@@ -1,0 +1,25 @@
+# Raw / local datasets
+archives/
+data/
+raw/
+dataset/
+*.zip
+*.parquet
+*.db
+*.duckdb
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local environment
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

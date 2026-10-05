@@ -1,0 +1,19 @@
+{
+  "generated_at": "2026-10-05T19:32:59",
+  "read_only": true,
+  "file_count": 2462,
+  "errors": 0,
+  "by_root": {
+    "LEGACY": 1919,
+    "UDIFF": 543
+  },
+  "by_format": {
+    "LEGACY": 1919,
+    "UDIFF": 543
+  },
+  "duplicate_checksum_count": 0,
+  "duplicate_date_count": 0,
+  "schema_variant_count": 3,
+  "first_file_date": "2016-09-20",
+  "last_file_date": "2026-09-18"
+}
