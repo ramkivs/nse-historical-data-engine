@@ -1,0 +1,30 @@
+{
+  "legacy_header_variant_files": [
+    {
+      "file": "cm10JUL2017bhav.csv.zip",
+      "date": "2017-07-10",
+      "trailing_empty_field": false
+    },
+    {
+      "file": "cm13JUL2020bhav.csv.zip",
+      "date": "2020-07-13",
+      "trailing_empty_field": false
+    }
+  ],
+  "legacy_timestamp_2digit_year_files": [
+    {
+      "file": "cm13JUL2020bhav.csv.zip",
+      "date": "2020-07-13",
+      "date_values": [
+        "13-Jul-20"
+      ]
+    }
+  ],
+  "files_with_BL_rows_but_zero_isin_deficit": [
+    {
+      "file": "cm22FEB2019bhav.csv.zip",
+      "date": "2019-02-22",
+      "BL": 1
+    }
+  ]
+}
