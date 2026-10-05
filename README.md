@@ -186,9 +186,14 @@ Current stage:
 
 
 
-\*\*Repository bootstrap / D01 evidence baseline\*\*
+\*\*D01 evidence baseline complete; D02 read-only equity eligibility & identity investigation complete (investigation record only — no implementation authority).\*\*
 
 
 
-Historical equity eligibility, security identity continuity, canonical normalization, and engine implementation remain subject to further investigation and governed decisions.
+- D02 investigation record: `docs/investigations/D02_EQUITY_ELIGIBILITY_AND_IDENTITY.md`
+- D02 derived evidence artifacts: `evidence/identity/` (regenerate read-only with `python3 evidence/identity/d02_derivation.py`)
+
+
+
+Equity eligibility governance, security-master scoping, canonical model finalization, and engine implementation remain subject to later gated decisions. D02 recommends D03 proceed as a fixtures-and-decisions gate against the Windows-side fixture requests in the D02 record (section 9).
 

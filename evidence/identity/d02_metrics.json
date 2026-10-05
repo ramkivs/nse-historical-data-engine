@@ -1,0 +1,80 @@
+{
+  "total_files": 2462,
+  "total_rows": 5689949,
+  "legacy_files": 1919,
+  "legacy_rows": 3989299,
+  "udiff_files": 543,
+  "udiff_rows": 1700650,
+  "files_series_sum_equals_row_count": 2462,
+  "distinct_series_codes": 172,
+  "series_shared_across_formats": 138,
+  "series_legacy_only": [
+    "AA",
+    "BG",
+    "BJ",
+    "BM",
+    "BO",
+    "D1",
+    "DR",
+    "E2",
+    "E3",
+    "HA",
+    "HB",
+    "HC",
+    "HE",
+    "ID",
+    "IL",
+    "P2",
+    "Q1",
+    "Q2",
+    "SO",
+    "W2",
+    "W3",
+    "X2",
+    "YD",
+    "YJ",
+    "YU",
+    "Z1",
+    "ZA",
+    "ZZ"
+  ],
+  "series_udiff_only": [
+    "AK",
+    "AO",
+    "SF",
+    "ZM",
+    "ZO",
+    "ZQ"
+  ],
+  "eq_rows": 4272478,
+  "files_with_eq": 2462,
+  "files_with_zero_duplicate_symbols": 15,
+  "files_isin_deficit": 1078,
+  "files_isin_excess": 0,
+  "isin_deficit_legacy": {
+    "deficit_eq_BL_files": 1606,
+    "deficit_eq_BL_plus_T0_files": 1618,
+    "residual_dist": {
+      "-1": 1,
+      "0": 1618,
+      "1": 283,
+      "2": 17
+    }
+  },
+  "isin_deficit_udiff": {
+    "deficit_eq_BL_files": 431,
+    "deficit_eq_BL_plus_T0_files": 541,
+    "residual_dist": {
+      "-1": 2,
+      "0": 541
+    }
+  },
+  "transition": {
+    "legacy_20240705_rows": 2775,
+    "udiff_20240708_rows": 2815,
+    "legacy_20240705_eq": 1906,
+    "udiff_20240708_eq": 1909,
+    "series_shared_on_boundary": 53
+  },
+  "missing_weekdays_count": 147
+}
