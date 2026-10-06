@@ -186,7 +186,7 @@ Current stage:
 
 
 
-\*\*D01 evidence baseline complete; D02 identity/eligibility investigation complete; D03 COMPLETE — Windows corpus execution published (evidence/d03/windows_run @ origin/main 094105b, 39 files, determinism PASS, post-run reconciliation in D03 record §15); D04 canonical-model decision investigation record committed; DEC-1/DEC-2 documented (D04B record + evidence/d04/); D05 CANONICAL MODEL SPECIFICATION authored (docs/specs/D05_CANONICAL_MODEL_SPEC.md) — all investigation/specification-only, no implementation authority.\*\*
+\*\*D01 evidence baseline complete; D02 identity/eligibility investigation complete; D03 COMPLETE — Windows corpus execution published (evidence/d03/windows_run @ origin/main 094105b, 39 files, determinism PASS, post-run reconciliation in D03 record §15); D04 canonical-model decision investigation record committed; DEC-1/DEC-2 documented (D04B record + evidence/d04/); D05 CANONICAL MODEL SPECIFICATION authored (docs/specs/D05_CANONICAL_MODEL_SPEC.md); D06 DECISION RECORDED — D05 §13 ADOPTED set ADOPTED as governed canonical-model contract, DEC-1 master acquisition DEFERRED, ENGINE IMPLEMENTATION NOT AUTHORIZED (docs/investigations/D06_CANONICAL_MODEL_ADOPTION_DECISION.md) — all investigation/specification/decision-only, no implementation authority.\*\*
 
 
 
@@ -199,8 +199,9 @@ Current stage:
 - D04 investigation record (decision inputs only; no schema adopted): `docs/investigations/D04_CANONICAL_MODEL_DECISION_INVESTIGATION.md`
 - D04B DEC-1/DEC-2 investigation record (official documentation + security-master scoping): `docs/investigations/D04B_DEC12_DOCUMENTATION_AND_MASTER_INVESTIGATION.md`; machine-readable evidence `evidence/d04/` (deterministic: `python3 evidence/d04/d04_arena_synthesis.py`)
 - D05 canonical model specification (specification-only; ADOPTED/DEFERRED/OPEN/NON-ASSUMPTION tagged): `docs/specs/D05_CANONICAL_MODEL_SPEC.md`
+- D06 canonical-model adoption decision record (D06 = ACCEPTED/ADOPTED; DEC-1 = DEFERRED; engine gate closed): `docs/investigations/D06_CANONICAL_MODEL_ADOPTION_DECISION.md`
 
 
 
-Equity eligibility governance, security-master scoping, canonical model finalization, and engine implementation remain subject to later gated decisions. D02 recommends D03 proceed as a fixtures-and-decisions gate against the Windows-side fixture requests in the D02 record (section 9).
+Canonical model finalized via D06 (§13-ADOPTED; F1–F17 and all OPEN/DEFERRED items carried forward unchanged). Equity eligibility governance and security-master scoping remain DEFERRED (D06 Decision B); engine implementation remains subject to a separate later authorization gate. D02 recommends D03 proceed as a fixtures-and-decisions gate against the Windows-side fixture requests in the D02 record (section 9).
 
