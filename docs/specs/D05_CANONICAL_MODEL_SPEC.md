@@ -239,7 +239,7 @@ is not applied to 2016–2023 semantics beyond consistency notes [ADOPTED — "d
 | F1 | ISIN not promoted to exchange-authoritative identity | §3.2, §6.1 — correlation key only |
 | F2 | FinInstrmId↔ISIN namespace equivalence not inferable | §6.2 — opaque |
 | F3 | Series exchange semantics for transitions not matching a documented action | §3.3 — OPEN-SEMANTICS |
-| F4 | UDiFF observed groups ≠ eligibility contract | §6.5 — no eligibility predicate |
+| F4 | UDiFF observed groups ≠ eligibility contract | §6 rule 5 — no eligibility predicate |
 | F5 | SYMBOL never durable identity | §3.1/§6.4 |
 | F6 | Units "as published"; no in-file units metadata | §10.2 |
 | F7 | Overlay/orphan observation ≠ microstructure inclusion rule; T0 inclusion | §3.5.2/§3.5.3 — T0 OPEN |
@@ -250,7 +250,7 @@ is not applied to 2016–2023 semantics beyond consistency notes [ADOPTED — "d
 | F12 | SF code | DEC2_CIRC_MEANINGS — OPEN |
 | F13 | BE rights-entitlement vs T2T row-level split | OPEN-SEMANTICS (heuristic evidence-only) |
 | F14 | SGB-STK documentation contradiction (D02-era) | remains OPEN, annotation-only |
-| F15 | ETF/EQ overlap counts requiring master join | §6.5 — DEFERRED |
+| F15 | ETF/EQ overlap counts requiring master join | §6 rule 5 — DEFERRED |
 | F16 | Corporate-action symbol co-location semantics | not modeled; DEFERRED |
 | F17 | Security master authority | §3.3 — DEFERRED, no-assumption recorded |
 
