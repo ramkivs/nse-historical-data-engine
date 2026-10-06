@@ -249,3 +249,195 @@ def parse_synthetic(
 
 def rows_by_line(build) -> Dict[int, object]:
     return {row.line_number: row for row in build.rows}
+
+
+# ================================================================== W2 / I2 evidence adapters
+W2_EVIDENCE = {
+    "aggregate": "FIX-OVERLAY-SEM-01__aggregate.json",
+    "cal_partial": None,  # evidence/d03/FIX-CAL-01_arena_partial.json
+    "dec2_cal": None,     # evidence/d04/DEC2_CAL_LABELS.json
+    "dec2_q8": None,      # evidence/d04/DEC2_Q8_OVERLAY_AGG.json
+    "inventory": None,    # evidence/inventory/file_inventory.json
+    "leg_census_per_file": "FIX-LEG-CENSUS-01__per_file.csv",
+    "leg_census_per_year": "FIX-LEG-CENSUS-01__per_year.csv",
+    "leg_census_summary": "FIX-LEG-CENSUS-01__summary.json",
+    "formulas": "FIX-SEM-DEF-01__formula_definitions.json",
+    "metrics_oracle": "FIX-SEM-DEF-01__metrics.csv",
+    "overlay_rows": "FIX-OVERLAY-SEM-01__per_overlay_row.csv",
+    "sem_def": "FIX-SEM-DEF-01__d01_definition_verdict.json",
+    "symbol_hist": "FIX-SYMBOL-HIST-01__summary.json",
+    "udiff_groups": "FIX-UD-CENSUS-01__groups.csv",
+    "xcont": "FIX-XCONT-01__summary.json",
+}
+D02_METRICS_PATH = os.path.join(REPO_ROOT, "evidence", "identity", "d02_metrics.json")
+SERIES_UNIVERSE_PATH = os.path.join(REPO_ROOT, "evidence", "identity", "d02_series_universe.csv")
+SERIES_CLASS_ROLLUP_PATH = os.path.join(REPO_ROOT, "evidence", "identity", "d02_series_class_rollup.csv")
+MISSING_WEEKDAYS_PATH = os.path.join(REPO_ROOT, "evidence", "identity", "d02_missing_weekdays.txt")
+INVENTORY_PATH = os.path.join(REPO_ROOT, "evidence", "inventory", "file_inventory.json")
+DEC2_CAL_PATH = os.path.join(REPO_ROOT, "evidence", "d04", "DEC2_CAL_LABELS.json")
+DEC2_Q8_PATH = os.path.join(REPO_ROOT, "evidence", "d04", "DEC2_Q8_OVERLAY_AGG.json")
+CAL_PARTIAL_PATH = os.path.join(REPO_ROOT, "evidence", "d03", "FIX-CAL-01_arena_partial.json")
+
+
+def _read_json(path):
+    with open(path, encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _read_csv(path):
+    with open(path, encoding="utf-8", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def w2_evidence(key: str) -> object:
+    """Read one frozen W2 evidence artifact from the published fixture directory."""
+    name = W2_EVIDENCE[key]
+    if name is None:
+        raise KeyError("evidence %r is not inside the published fixture directory" % key)
+    path = os.path.join(FIXTURE_DIR, name)
+    if name.endswith(".csv"):
+        return _read_csv(path)
+    return _read_json(path)
+
+
+def load_inventory_records():
+    """D01 inventory -> governed file records (the calendar/metrics input)."""
+    from nse_engine.evidence_inputs import InventoryFileRecord
+
+    records = []
+    for entry in _read_json(INVENTORY_PATH):
+        records.append(
+            InventoryFileRecord(
+                file_name=entry["file_name"],
+                date=entry["date_from_filename"],
+                root=entry["root"],
+                sha256=entry["sha256"],
+                row_count=int(entry["row_count"]),
+                series_counts=tuple(sorted(entry.get("series_counts", {}).items())),
+            )
+        )
+    return tuple(records)
+
+
+def load_file_metric_records():
+    """Frozen per-file D01 metric evidence -> records."""
+    from nse_engine.evidence_inputs import FileMetricRecord
+
+    records = []
+    for row in _read_csv(os.path.join(FIXTURE_DIR, W2_EVIDENCE["metrics_oracle"])):
+        records.append(
+            FileMetricRecord(
+                format_family=row["format"],
+                file_name=row["file"],
+                rows=int(row["rows"]),
+                blank_symbol_rows=int(row["blank_symbol_rows"]),
+                blank_isin_rows=int(row["blank_isin_rows"]),
+                nonblank_isin_rows=int(row["nonblank_isin_rows"]),
+                distinct_nonblank_isin=int(row["distinct_nonblank_isin"]),
+                isins_extra_duplicate_rows=int(row["isins_extra_duplicate_rows"]),
+                distinct_nonblank_symbol=int(row["distinct_nonblank_symbol"]),
+                distinct_symbol_series_pairs=int(row["distinct_symbol_series_pairs"]),
+                symbol_series_duplicate_rows=int(row["symbol_series_duplicate_rows"]),
+                d01_isin_count=int(row["d01_isin_count"]),
+                d01_symbol_count=int(row["d01_symbol_count"]),
+                discriminating_file=row["discriminating_file"] == "True",
+                d01_isin_eq_distinct_nonblank=row["d01_isin_eq_distinct_nonblank"] == "True",
+                d01_isin_eq_nonblank_rows=row["d01_isin_eq_nonblank_rows"] == "True",
+                d01_sym_eq_distinct_nonblank=row["d01_sym_eq_distinct_nonblank"] == "True",
+                d01_sym_eq_rows=row["d01_sym_eq_rows"] == "True",
+                requested_date=row["requested_date"] or None,
+            )
+        )
+    return tuple(records)
+
+
+def load_calendar_labels():
+    """DEC2_CAL_LABELS.json -> (labels, circular holidays, registry ids)."""
+    from nse_engine.evidence_inputs import CalendarLabelRecord, CircularHolidayRecord
+
+    document = _read_json(DEC2_CAL_PATH)
+    registry_ids = document.get("provenance", {}).get("circular_registry_ids", ())
+    labels = []
+    for entry in document["per_missing_day"]:
+        circular = entry.get("circular", "")
+        registry_id = circular if circular.startswith("NSE/") else ""
+        labels.append(
+            CalendarLabelRecord(
+                missing_date=entry["missing_date"],
+                label=entry["label"],
+                circular=circular,
+                registry_id=registry_id,
+            )
+        )
+    holidays = tuple(
+        CircularHolidayRecord(holiday_date=entry["holiday_per_circular"], note=entry.get("note", ""))
+        for entry in document.get("files_present_on_circular_holiday", ())
+    )
+    return tuple(labels), holidays, tuple(registry_ids), document
+
+
+def load_overlay_fixture_rows():
+    from nse_engine.evidence_inputs import OverlayFixtureRow
+
+    rows = []
+    for row in _read_csv(os.path.join(FIXTURE_DIR, W2_EVIDENCE["overlay_rows"])):
+        rows.append(
+            OverlayFixtureRow(
+                format_family=row["format"],
+                date=row["date"],
+                overlay_series=row["overlay_series"],
+                overlay_symbol=row["overlay_symbol"],
+                overlay_isin=row["overlay_isin"],
+                match_type=row["match_type"],
+                base_symbol=row["base_symbol"],
+                base_series=row["base_series"],
+                base_isin=row["base_isin"],
+                qty_rel=row["qty_rel"],
+            )
+        )
+    return tuple(rows)
+
+
+def load_series_classes():
+    """D02 provisional classification (evidence input, carried not re-derived)."""
+    classes = {}
+    for row in _read_csv(SERIES_UNIVERSE_PATH):
+        classes[row["series"]] = (row["provisional_class"], row["classification_basis"])
+    return classes
+
+
+def load_series_universe_rows():
+    return _read_csv(SERIES_UNIVERSE_PATH)
+
+
+def load_series_class_rollup():
+    return _read_csv(SERIES_CLASS_ROLLUP_PATH)
+
+
+def load_legacy_census_per_year():
+    return _read_csv(os.path.join(FIXTURE_DIR, W2_EVIDENCE["leg_census_per_year"]))
+
+
+def load_legacy_census_per_file():
+    return _read_csv(os.path.join(FIXTURE_DIR, W2_EVIDENCE["leg_census_per_file"]))
+
+
+def load_missing_weekdays():
+    dates = []
+    with open(MISSING_WEEKDAYS_PATH, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                dates.append(line)
+    return tuple(dates)
+
+
+def build_w2_samples(config=None, run_id=None):
+    """W1 builds for the 8 published samples -> W2 derivation."""
+    from nse_engine.pipeline import build_w2
+
+    builds = tuple(
+        build_sample(name, config=config, run_id=run_id) for name in PUBLISHED_SAMPLES
+    )
+    labels, holidays, _registry, _document = load_calendar_labels()
+    return build_w2(builds, load_inventory_records(), labels, holidays)

@@ -17,6 +17,14 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 from . import contract
+from .calendar import CalendarResult, MemberDateFact, derive_calendar
+from .evidence_inputs import (
+    CalendarLabelRecord,
+    CircularHolidayRecord,
+    InventoryFileRecord,
+)
+from .identity import AssociationBuild, build_associations
+from .metrics import RowMetrics, compute_row_metrics
 from .overlays import OverlayLinkResult, OverlayObservation, link_overlay_observations
 from .parsing import MemberParse, QuarantineRecord, SourceDescriptor, parse_member_bytes
 from .rows import RowBuildResult, SecurityRow, build_rows
@@ -110,4 +118,97 @@ def build_canonical(
         parse=parse,
         row_build=row_build,
         overlay_link=overlay_link,
+    )
+
+
+# ================================================================== W2 / I2 assembly
+
+def member_date_facts(builds: Tuple[CanonicalBuild, ...]) -> Tuple[MemberDateFact, ...]:
+    """Derive per-date member facts from parsed builds (only what a parsed member can show).
+
+    ``trad_dt_eq_biz_dt`` is taken from the per-row comparison observation W1 already emits:
+    ``True`` only when every row of a UDiFF member reports verbatim text equality; ``None``
+    (undetermined) when any row's BizDt is blank, and ``None`` for legacy members (the legacy
+    schema has no BizDt at all). Nothing is defaulted.
+    """
+    facts = []
+    for build in builds:
+        family = build.parse.header.family
+        if family != contract.FAMILY_UDIFF:
+            facts.append(
+                MemberDateFact(
+                    business_date=build.rows[0].business_date if build.rows else "",
+                    format_family=family,
+                    trad_dt_eq_biz_dt=None,
+                )
+            )
+            continue
+        comparisons = {
+            dict(row.observations).get("bizdt_traddt_comparison") for row in build.rows
+        }
+        # True only when every row of the member reports verbatim text equality; any other
+        # mixture (blank BizDt, multiple comparison outcomes) stays undetermined.
+        equality = True if build.rows and comparisons == {"verbatim_text_equality"} else None
+        facts.append(
+            MemberDateFact(
+                business_date=build.rows[0].business_date if build.rows else "",
+                format_family=family,
+                trad_dt_eq_biz_dt=equality,
+            )
+        )
+    return tuple(fact for fact in facts if fact.business_date)
+
+
+@dataclass(frozen=True)
+class W2Build:
+    """W2 derivation over a set of W1 canonical builds (in-memory only)."""
+
+    builds: Tuple[CanonicalBuild, ...]
+    calendar: CalendarResult
+    associations: AssociationBuild
+    metrics: RowMetrics
+
+    @property
+    def rows(self) -> Tuple[SecurityRow, ...]:
+        rows = []
+        for build in self.builds:
+            rows.extend(build.rows)
+        return tuple(rows)
+
+    @property
+    def observations(self) -> Tuple[OverlayObservation, ...]:
+        observations = []
+        for build in self.builds:
+            observations.extend(build.observations)
+        return tuple(observations)
+
+    def totals(self) -> dict:
+        return {
+            "associations": self.associations.totals(),
+            "calendar": self.calendar.totals(),
+            "metrics": self.metrics.to_dict(),
+            "members": len(self.builds),
+            "rows": len(self.rows),
+        }
+
+
+def build_w2(
+    builds: Tuple[CanonicalBuild, ...],
+    inventory: Tuple[InventoryFileRecord, ...],
+    labels: Tuple[CalendarLabelRecord, ...] = (),
+    circular_holidays: Tuple[CircularHolidayRecord, ...] = (),
+    member_facts: Optional[Tuple[MemberDateFact, ...]] = None,
+) -> W2Build:
+    """Compose the W2 derivations over W1 builds and governed evidence inputs.
+
+    Deterministic and IO-free: identical builds + identical evidence inputs yield identical
+    calendar, association and metric results (D05 §9; W2 prompt §10 F).
+    """
+    rows = tuple(row for build in builds for row in build.rows)
+    facts = member_date_facts(builds) if member_facts is None else member_facts
+    return W2Build(
+        builds=tuple(builds),
+        calendar=derive_calendar(inventory, labels, circular_holidays, facts),
+        associations=build_associations(rows),
+        metrics=compute_row_metrics(rows),
     )

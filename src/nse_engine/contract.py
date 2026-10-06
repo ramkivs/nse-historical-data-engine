@@ -23,15 +23,20 @@ from __future__ import annotations
 # ------------------------------------------------------------------ contract identity
 SPEC_VERSION = "D05/1.0"  # D05 §8 provenance field: spec_version
 TOOL_NAME = "nse-engine"
-TOOL_VERSION = "w1-1.0.0"
+TOOL_VERSION = "w2-1.0.0"
 
 #: Complete set of engine modules covered by :func:`nse_engine.provenance.tool_fingerprint`.
 #: A test asserts this equals the actual module set so the fingerprint cannot drift.
 ENGINE_MODULES = (
     "__init__",
     "blocked",
+    "calendar",
     "contract",
     "errors",
+    "evidence_inputs",
+    "identity",
+    "metrics",
+    "overlay_evidence",
     "overlays",
     "parsing",
     "pipeline",
@@ -418,3 +423,167 @@ KNOWN_EVIDENCE_DIVERGENCES = (
 #: D05 §9.4: fields explicitly declared run-metadata are excluded from rerun determinism.
 RUN_METADATA_FIELDS = ("provenance.run_id",)
 RUN_METADATA_PLACEHOLDER = "<run-metadata:excluded>"
+
+# ================================================================== W2 / I2 additions
+# Everything below is additive W2 scope (D07 §13-A): calendar derivation, dated
+# associations, overlay evidence reconciliation, D01 metric re-computation. No constant here
+# resolves an OPEN semantic or amends a W1 constant.
+
+# ------------------------------------------------------------------ W2 calendar (D05 §3.4)
+CALENDAR_LABEL_OFFICIAL_HOLIDAY = "official-holiday"
+CALENDAR_LABEL_UNEXPLAINED = "unexplained-by-obtained-circulars"
+CALENDAR_LABEL_NOT_RETRIEVED = "not-retrieved"
+CALENDAR_LABEL_NOT_APPLICABLE = "not-applicable"
+CALENDAR_LABEL_STATUSES = (
+    CALENDAR_LABEL_OFFICIAL_HOLIDAY,
+    CALENDAR_LABEL_UNEXPLAINED,
+    CALENDAR_LABEL_NOT_RETRIEVED,
+    CALENDAR_LABEL_NOT_APPLICABLE,
+)
+
+#: D05 §3.4: file-presence is the trading-session signal; circulars are LABELS only.
+#: Consumers MUST NOT use circulars to predict file presence.
+CALENDAR_PRESENCE_RULE = (
+    "file_present (D01 inventory presence on the date) is the trading-session signal; the annual "
+    "circular is a label only and MUST NOT be used to predict file presence (D05 §3.4)"
+)
+CALENDAR_LABEL_SOURCE = (
+    "evidence/d04/DEC2_CAL_LABELS.json (missing-weekday labels) resolving through "
+    "evidence/d04/DEC12_CIRCULAR_REGISTRY.json"
+)
+CALENDAR_PRESENCE_SOURCE = "evidence/inventory/file_inventory.json (D01: one record per archive member)"
+
+#: D07 §9 item 8: these three missing weekdays are NOT explained by the obtained circulars.
+#: W2 represents the unresolved state (label_status) and never assigns a cause.
+CALENDAR_UNRESOLVED_DATES = ("2024-11-20", "2025-10-20", "2026-01-15")
+CALENDAR_UNRESOLVED_DEPENDENCY = "D07-OPEN-8"
+
+#: D05 §3.4 / DEC2_CAL_LABELS: a circular holiday with a file present (both-direction divergence).
+CALENDAR_FILES_PRESENT_ON_CIRCULAR_HOLIDAY = ("2025-10-21",)
+CALENDAR_DIVERGENCE_NOTE = (
+    "Both directions of file-presence/circular divergence are observed: 2024-11-01 (Diwali) has no "
+    "file and is an official holiday; 2025-10-21 is a circular holiday WITH a normal-scale file "
+    "(Muhurat special session, NSE/FAOP/70320); 2025-10-20 is file-absent though not in the annual "
+    "list. The calendar stores the divergence, it does not reconcile it."
+)
+CALENDAR_MISSING_WEEKDAY_NOTE = (
+    "missing_weekday = a weekday inside the corpus span with no archive file (147 established by D03). "
+    "Legacy-era causes are NOT retrieved and MUST NOT be invented (D05 §3.4: label_status=not-retrieved)."
+)
+CALENDAR_TRADDT_BIZDT_NOTE = (
+    "trad_dt_eq_biz_dt is derivable only where a parsed member was supplied for that date (UDiFF era); "
+    "otherwise it is None (undetermined) -- never defaulted."
+)
+
+# ------------------------------------------------------------------ W2 identity / dated associations (D05 §3.2–§3.3)
+ASSOCIATION_TYPE_CORPUS_OBSERVED = "corpus-observed"
+ASSOCIATION_TYPES = (ASSOCIATION_TYPE_CORPUS_OBSERVED, "master-snapshot", "etf-register-membership")
+#: D05 §3.3: "Only the first exists today." master-snapshot/etf-register-membership are DEC-1-deferred.
+ASSOCIATION_TYPES_PRESENT = (ASSOCIATION_TYPE_CORPUS_OBSERVED,)
+INTERVAL_BASIS_OBSERVED_RANGE = "observed-range"
+
+#: D05 §6.1 [ADOPTED]: normalized ISIN is the only cross-format/cross-era correlation key.
+#: D05 §3.2 [NON-ASSUMPTION]: this is NOT an exchange-authoritative identity.
+IDENTITY_KEY_BASIS = "isin_correlation_key_upper_trim"
+IDENTITY_NON_PROMOTION_NOTE = (
+    "security_id in this model is the D05 §6.1 adopted correlation key (normalized ISIN). It is NOT "
+    "promoted to exchange-authoritative identity (D05 §3.2 non-assumption); continuity across the "
+    "legacy/UDiFF boundary is OPEN (D05 §3.2, D07 §9 item 6); master-snapshot and ETF-register "
+    "associations are DEC-1-deferred (D07 §9, §13-C)."
+)
+#: D05 §3.3: associations are append-only per observed interval; a state recurring after a different
+#: state starts a new interval (EQ -> BE -> EQ yields three dated rows).
+ASSOCIATION_INTERVAL_RULE = (
+    "one DatedAssociation per contiguous run of an identical (symbol, series) state in observation "
+    "order; a state recurring after a different state starts a new association (D05 §3.3)"
+)
+#: Governed evidence method for the corpus transition chain (FIX-SYMBOL-HIST-01 method string).
+ASSOCIATION_CHAIN_METHOD = (
+    "FIX-SYMBOL-HIST-01 method: timelines keyed by non-blank ISIN; overlay rows are tracked but "
+    "excluded from the transition chain (they inform the overlay evidence)"
+)
+UNKEYED_REASON_BLANK_ISIN = "blank_isin_no_correlation_key"
+
+# ------------------------------------------------------------------ W2 D01 metrics (D05 §4)
+#: Transcribed from FIX-SEM-DEF-01__formula_definitions.json (the D01 definition reconstruction).
+D01_METRIC_DEFINITIONS = (
+    ("rows", "count of data rows (header excluded)"),
+    ("blank_symbol_rows", "rows where symbol is empty/whitespace-only"),
+    ("blank_isin_rows", "rows where ISIN is empty/whitespace-only"),
+    ("nonblank_isin_rows", "count of rows with non-blank ISIN (duplicates included)"),
+    ("distinct_nonblank_isin", "count of unique ISIN values (whitespace-stripped, uppercased, non-blank)"),
+    ("isins_extra_duplicate_rows", "nonblank_isin_rows minus distinct_nonblank_isin"),
+    ("distinct_nonblank_symbol", "count of unique non-blank symbols (stripped, uppercased)"),
+    ("distinct_symbol_series_pairs", "count of unique (symbol,series) pairs"),
+    ("symbol_series_duplicate_rows", "sum over pairs of (occurrences - 1)"),
+)
+D01_METRIC_NAMES = tuple(name for name, _definition in D01_METRIC_DEFINITIONS)
+D01_NORMALIZATION = "whitespace-strip + uppercase for distinct/symbol identity; blank = empty or whitespace-only"
+#: D05 §4: distinct means distinct NON-BLANK; zero positional counts; blanks are never counted as values.
+D01_DISTINCT_RULE = (
+    "distinct counts mean distinct NON-BLANK values (whitespace-stripped, uppercased); blank is not a "
+    "value; zero positional counts; a blank row contributes to blank_*_rows only"
+)
+D01_FORMULA_SOURCE = "evidence/d03/windows_run/FIX-SEM-DEF-01__formula_definitions.json"
+D01_VERDICT_SOURCE = "evidence/d03/windows_run/FIX-SEM-DEF-01__d01_definition_verdict.json"
+D01_PER_FILE_METRIC_SOURCE = (
+    "evidence/d03/windows_run/FIX-SEM-DEF-01__metrics.csv (per-file D01 metrics for all 2,462 files)"
+)
+#: Verdict values for the D01 definition re-derivation. The published note records that the
+#: verdict is derived ONLY from files where the two definitions differ; a corpus set with no
+#: discriminating file therefore cannot select a reading and stays UNDETERMINED (fail closed),
+#: and a set explained by neither reading is MIXED (never rounded to a reading).
+D01_VERDICT_ISIN_EQ_DISTINCT_NONBLANK = "D01 isin_count == DISTINCT-NONBLANK"
+D01_VERDICT_ISIN_EQ_NONBLANK_ROWS = "D01 isin_count == NONBLANK-ROWS"
+D01_VERDICT_UNDETERMINED = "UNDETERMINED (no discriminating files)"
+D01_VERDICT_MIXED = "MIXED (neither reading explains all discriminating files)"
+#: ``format_presence`` vocabulary of the published D02 series universe (evidence/identity).
+SERIES_FORMAT_PRESENCE_VALUES = ("LEGACY_ONLY", "UDIFF_ONLY", "BOTH")
+SERIES_UNIVERSE_SOURCE = "evidence/identity/d02_series_universe.csv"
+SERIES_CLASS_SOURCE = "evidence/identity/d02_series_class_rollup.csv"
+#: Honest boundary: the frozen per-file metric evidence IS present in the repository, so D01 metric
+#: ALGEBRA is recomputable exactly; raw-row recomputation at corpus scale is not (no archives in Git).
+D01_RECOMPUTATION_BOUNDARY = (
+    "Recomputation has two levels, both deterministic and evidence-anchored: (A) row-level metrics "
+    "computed from canonical rows for any supplied member set -- exact by construction and demonstrated "
+    "on the published extracts; (B) corpus-level metric algebra folded from the frozen per-file D01 "
+    "metric evidence (FIX-SEM-DEF-01__metrics.csv, 2,462 files) -- exact. Raw-row recomputation at "
+    "corpus scale requires the archives (Windows) and belongs to the full-run stage (I4); the published "
+    "extracts are stratified samples (12.8%-17.5% of file rows) and can never satisfy a corpus-level "
+    "equality assertion."
+)
+
+# ------------------------------------------------------------------ W2 overlay evidence (W1-DIV-OVERLAY)
+W1_DIV_OVERLAY_ID = "W1-DIV-OVERLAY"
+W1_DIV_OVERLAY_FIXTURE = "evidence/d03/windows_run/FIX-OVERLAY-SEM-01__per_overlay_row.csv"
+W1_DIV_OVERLAY_AGGREGATE_FIXTURE = "evidence/d03/windows_run/FIX-OVERLAY-SEM-01__aggregate.json"
+W1_DIV_OVERLAY_DEC_EVIDENCE = "evidence/d04/DEC2_Q8_OVERLAY_AGG.json"
+#: Determined cause, established from governed evidence (see the W2 report and the tests):
+#: every fixture match the engine could not reproduce has its asserted base row ABSENT from the
+#: published extract, while every engine observation has a fixture row at the same key.
+W1_DIV_OVERLAY_CAUSE_FIXTURE_TRUNCATION = "fixture_truncation_source_coverage"
+W1_DIV_OVERLAY_CAUSE_UNRESOLVED = "unresolved"
+W1_DIV_OVERLAY_DETERMINATION = {
+    "method": (
+        "fixture-centric keyed comparison on the extract (date, overlay_series, normalized ISIN), with a "
+        "decisive base-presence test that considers only non-overlay rows"
+    ),
+    "finding": (
+        "All unreproducible fixture matches are explained by absence of the asserted base row from the "
+        "stratified published extract (no case exists where a present non-overlay same-ISIN row was not "
+        "matched); every engine observation has a fixture row at the same key. No defect case exists."
+    ),
+    "non_elimination": (
+        "The count discrepancy is PRESERVED, not forced to zero: matching semantics were not tuned, and "
+        "the disposition record carries the disagreement counts explicitly."
+    ),
+    "scope_limit": (
+        "The engine links observations per member (member-scoped); the fixture was produced corpus-wide. "
+        "Corpus-scale agreement is only demonstrable in the full-run stage (I4)."
+    ),
+}
+OVERLAY_ACCOUNTING_NOTE = (
+    "Evidence accounting only: the published per-row overlay fixture is folded into its aggregate "
+    "buckets and compared with the published aggregate/DEC evidence. This verifies the published "
+    "evidence is internally consistent; it changes no matching semantics."
+)
