@@ -186,7 +186,7 @@ Current stage:
 
 
 
-\*\*D01 evidence baseline complete; D02 identity/eligibility investigation complete; D03 COMPLETE — Windows corpus execution published (evidence/d03/windows_run @ origin/main 094105b, 39 files, determinism PASS, post-run reconciliation in D03 record §15); D04 canonical-model decision investigation record committed; DEC-1/DEC-2 documented (D04B record + evidence/d04/); D05 CANONICAL MODEL SPECIFICATION authored (docs/specs/D05_CANONICAL_MODEL_SPEC.md); D06 DECISION RECORDED — D05 §13 ADOPTED set ADOPTED as governed canonical-model contract, DEC-1 master acquisition DEFERRED, ENGINE IMPLEMENTATION NOT AUTHORIZED (docs/investigations/D06_CANONICAL_MODEL_ADOPTION_DECISION.md) — all investigation/specification/decision-only, no implementation authority.\*\*
+\*\*D01 evidence baseline complete; D02 identity/eligibility investigation complete; D03 COMPLETE — Windows corpus execution published (evidence/d03/windows_run @ origin/main 094105b, 39 files, determinism PASS, post-run reconciliation in D03 record §15); D04 canonical-model decision investigation record committed; DEC-1/DEC-2 documented (D04B record + evidence/d04/); D05 CANONICAL MODEL SPECIFICATION authored (docs/specs/D05_CANONICAL_MODEL_SPEC.md); D06 DECISION RECORDED — D05 §13 ADOPTED set ADOPTED as governed canonical-model contract, DEC-1 master acquisition DEFERRED, ENGINE IMPLEMENTATION NOT AUTHORIZED (docs/investigations/D06_CANONICAL_MODEL_ADOPTION_DECISION.md); D07 CHARTER + IMPLEMENTATION AUTHORIZATION RECORDED — engine implementation AUTHORIZED within D07 scope (non-production), DEC-1 remains DEFERRED, D7.4 pointer restatement + D7.5 backfill applied (docs/investigations/D07_GATE_DEFINITION_AND_IMPLEMENTATION_AUTHORIZATION.md) — implementation proceeds only after D07 record is durable and remote-verified.\*\*
 
 
 
@@ -200,8 +200,9 @@ Current stage:
 - D04B DEC-1/DEC-2 investigation record (official documentation + security-master scoping): `docs/investigations/D04B_DEC12_DOCUMENTATION_AND_MASTER_INVESTIGATION.md`; machine-readable evidence `evidence/d04/` (deterministic: `python3 evidence/d04/d04_arena_synthesis.py`)
 - D05 canonical model specification (specification-only; ADOPTED/DEFERRED/OPEN/NON-ASSUMPTION tagged): `docs/specs/D05_CANONICAL_MODEL_SPEC.md`
 - D06 canonical-model adoption decision record (D06 = ACCEPTED/ADOPTED; DEC-1 = DEFERRED; engine gate closed): `docs/investigations/D06_CANONICAL_MODEL_ADOPTION_DECISION.md`
+- D07 gate charter + implementation authorization record (D07 decisions 1-4; pointer restatement D7.4; D06 §14 backfill D7.5; scope boundary §13; first work item W1 §14): `docs/investigations/D07_GATE_DEFINITION_AND_IMPLEMENTATION_AUTHORIZATION.md`
 
 
 
-Canonical model finalized via D06 (§13-ADOPTED; F1–F17 and all OPEN/DEFERRED items carried forward unchanged). Equity eligibility governance and security-master scoping remain DEFERRED (D06 Decision B); engine implementation remains subject to a separate later authorization gate. D02 recommends D03 proceed as a fixtures-and-decisions gate against the Windows-side fixture requests in the D02 record (section 9).
+Canonical model finalized via D06 (§13-ADOPTED; F1–F17 and all OPEN/DEFERRED items carried forward unchanged). Equity eligibility governance and security-master scoping remain DEFERRED (D06 Decision B); engine implementation was authorized at gate D07 within its explicit scope (non-production; fail-closed on OPEN semantics) — see `docs/investigations/D07_GATE_DEFINITION_AND_IMPLEMENTATION_AUTHORIZATION.md`. D02 recommends D03 proceed as a fixtures-and-decisions gate against the Windows-side fixture requests in the D02 record (section 9).
 

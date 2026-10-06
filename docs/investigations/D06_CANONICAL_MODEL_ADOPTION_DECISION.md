@@ -53,6 +53,13 @@ reopens this question.
 - Baseline commit (adoption applies to exactly this content):
   `5585ccb0ebfe9aa3f3755c8b5eebfcdf8ddbf5bc` ("Publish D05 canonical model and investigation artifacts")
 
+> **Amendment (D07, 2026-10-06, D7.4):** the Windows publication of D06 established the CURRENT
+> authoritative `main` lineage as root/squash commit `5d7e9425aa5fd80f7ec580c91afad727f9323b90`; `5585ccb`
+> is no longer reachable from `main`. Historical accuracy of the statement above is preserved (adoption was
+> issued against that content state); effectivity reconciles to the current lineage because all decision-
+> bearing content was verified byte-identical across the 79 tracked files at D07 Phase 1. Full rationale:
+> `docs/investigations/D07_GATE_DEFINITION_AND_IMPLEMENTATION_AUTHORIZATION.md` §10.
+
 ## 6. F1–F17 non-assumption register — carried forward UNCHANGED
 
 All fifteen rows of D05 §12 remain [NON-ASSUMPTION] and binding: F1 ISIN not promoted to exchange-authoritative
@@ -122,7 +129,7 @@ remains a **separate later authorization gate**. Nothing in this record grants i
 ## 13. Final D06 disposition
 
 **D06 = ACCEPTED / ADOPTED; DEC-1 = DEFERRED.**
-Effective against `origin/main@5585ccb0ebfe9aa3f3755c8b5eebfcdf8ddbf5bc`. Engine implementation gate remains
+Effective against `origin/main@5585ccb0ebfe9aa3f3755c8b5eebfcdf8ddbf5bc` (restated by D07 D7.4 to the current `origin/main@5d7e9425…` lineage on content identity — see §5 amendment). Engine implementation gate remains
 closed and unstarted. Next stage begins only on explicit new authorization (no automatic commencement —
 standing governance rule from D04 §7).
 
@@ -130,7 +137,8 @@ standing governance rule from D04 §7).
 
 - Applied from Arena transfer package (see package `TRANSFER_MANIFEST.json`), verified pre-image:
   `README.md` on main must equal the recorded preimage hash before update; `D06_*.md` is a NEW path.
-- Commit: `<WINDOWS: record commit sha after step G>`
+- Commit: `5d7e9425aa5fd80f7ec580c91afad727f9323b90` (Windows publication; root/squash lineage as explained in D07 §10)
+- Verification basis as recorded at D07 Phase 1 (2026-10-06): remote-tracking `origin/main` == `5d7e9425…`; `docs/investigations/D06_CANONICAL_MODEL_ADOPTION_DECISION.md` present on that tree; all 79 tracked files byte-identical to the Arena-published content (zero DIFFERS). Independent live `ls-remote` from the Arena environment remains transport-blocked; the operator's independent remote verification at publication time is recorded as the declaring basis.
 - Pushed to `origin/main` (or merge route), then MANDATORY remote verification:
   `git ls-remote origin refs/heads/main`; `git cat-file -e origin/main:docs/investigations/D06_CANONICAL_MODEL_ADOPTION_DECISION.md`.
 - D06 is durable **only after** that remote verification passes; this file alone does not claim it.

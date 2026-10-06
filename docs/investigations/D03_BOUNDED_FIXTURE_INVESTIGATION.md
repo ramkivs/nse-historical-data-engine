@@ -340,3 +340,10 @@ and consumed by `docs/specs/D05_CANONICAL_MODEL_SPEC.md`. Upgrades there change 
 frozen dispositions (Q7 units, Q8 BL/IL additivity, CAL labels, Q3 mechanism class) and change NO corpus fact
 recorded in this document; §8/§15 remain the corpus-side source of truth, and every item listed as FROZEN that
 lacks new evidence (F1–F17 register in D05) stays frozen.
+
+## 17. Baseline pointer note (D07 D7.4, added 2026-10-06)
+
+The `094105b` pointers in this record (§0 header, §12/§15 narratives) are historical publication events and
+remain accurate as such. Current authoritative lineage changed when the Windows D06 publication established
+`main` as root/squash commit `5d7e9425aa5fd80f7ec580c91afad727f9323b90`; all `windows_run` content verified
+byte-identical on that lineage at D07 Phase 1. Rationale and full reconciliation table: D07 record §10.
