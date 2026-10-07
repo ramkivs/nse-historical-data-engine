@@ -1406,8 +1406,12 @@ class PathCustodyTests(RunnerTestCase):
 
         self.assertTrue(i4_preflight.path_is_within(out, corpus_root, case_insensitive=True),
                         "case-folded comparison must detect the same directory")
-        self.assertFalse(i4_preflight.path_is_within(out, corpus_root, case_insensitive=False),
-                         "a case-sensitive filesystem keeps genuinely distinct paths distinct")
+        if os.name == "nt":
+            self.assertTrue(i4_preflight.path_is_within(out, corpus_root, case_insensitive=False),
+                            "Windows realpath resolves equivalent case spellings to the same directory")
+        else:
+            self.assertFalse(i4_preflight.path_is_within(out, corpus_root, case_insensitive=False),
+                             "a case-sensitive filesystem keeps genuinely distinct paths distinct")
         self.assertEqual(
             i4_preflight.comparison_key(out, True), i4_preflight.comparison_key(out, True)
         )
