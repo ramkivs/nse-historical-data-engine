@@ -31,6 +31,11 @@ ENGINE_MODULES = (
     "__init__",
     "blocked",
     "calendar",
+    # G-I4-M1-CORRECTIVE: compact exact containers shared by the D01 metric fold and the
+    # association accumulator (interned tokens, 64-bit pair set). Retained-state representation
+    # only: no governed value is produced or changed here, but the module is part of the engine
+    # revision and its bytes are bound into ``provenance.tool_sha256``.
+    "compact",
     "contract",
     "errors",
     "evidence_inputs",
@@ -43,6 +48,10 @@ ENGINE_MODULES = (
     "provenance",
     "rows",
     "serialize",
+    # G-I4-M1: the bounded-memory W2 streaming composition. It carries governed W2 assembly
+    # semantics (member facts, metric fold and association assembly wiring), so its bytes are
+    # bound into ``provenance.tool_sha256`` exactly like every other engine module.
+    "w2_stream",
 )
 
 # ------------------------------------------------------------------ format families

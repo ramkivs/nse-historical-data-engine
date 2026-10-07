@@ -52,8 +52,8 @@ python tools\i4_runner\i4_runner.py run ^
   --run-id      "i4-<declared-token>" ^
   --expect-records 2462 ^
   --expect-inventory-lf-sha256 336b9531cd34f48e9a2e7e7593cc4e9c2736b3864d8213bc65d6ab8b488729d2 ^
-  --expect-tool-fingerprint 7bee84902f8cb0e5c60703acbe1b17d6e85a9b9762289bab1741d9f003df5a52 ^
-  --expect-runner-fingerprint 8ceb4732283e78b19d5991b8994db1efd93c2d2508849edcfa3ec5f5bc62651f ^
+  --expect-tool-fingerprint d3269b731008a0d544eaa7e96d6c6b75cf94dfd6ce31d8fb5e1f23fdf10a80e9 ^
+  --expect-runner-fingerprint f3ebf62488716ea3f4fff76b104760dfee7df45c81af253a4faf352beb624c4a ^
   --min-free-bytes <bytes>
 ```
 
@@ -65,7 +65,11 @@ Notes.
 * `--expect-*` arguments are optional declarations; when supplied, a mismatch is a Tier A
   preflight failure. `--expect-runner-fingerprint` pins the declared runner module set
   (`RUNNER_MODULES`, RD-3): any edit to those six modules invalidates the value, which is the
-  intended behaviour — publish the new fingerprint with the new runner bytes. `--expect-tool-fingerprint` detects a CRLF-converted or edited engine
+  intended behaviour — publish the new fingerprint with the new runner bytes. The values shown
+  above are the G-I4-M1 revision's; the pre-revision values were
+  `7bee84902f8cb0e5c60703acbe1b17d6e85a9b9762289bab1741d9f003df5a52` (engine) and
+  `618bfd4c4919f3224a3e0f64682c21617c356580ebccd807f8abce528302c904` (runner, as reported by
+  `i4_identity.runner_fingerprint()`; this README previously printed a stale value). `--expect-tool-fingerprint` detects a CRLF-converted or edited engine
   (a Windows checkout with `core.autocrlf=true` changes engine bytes while `git status` stays
   clean) and the CRLF-invariant `lf_sha256` basis is used for the inventory.
 * Declared paths are never written into the package (RD-8, clock-free/path-free package). The
@@ -175,14 +179,31 @@ failure · output hash failure · package assembly failure · replay mismatch.
 
 ## 6. Operational notes
 
-* **Memory.** The engine's W2 composition takes the canonical builds themselves
-  (`build_w2(builds, …)`), so every member's `CanonicalBuild` is retained until the single
-  `build_w2` call at the end. Rows, evidence and reconciliation records are still emitted
-  per member and JSONL output is streamed, but peak memory is proportional to the total
-  canonical row count (≈5.7M rows for the governed corpus) plus the retained build objects.
-  Nothing is substituted for the engine's objects: the runner passes exactly what
-  `build_canonical()` returned (F2).
-* **Time.** Preflight reads every archive once (hash + structure) and processing reads each
+* **Memory (G-I4-M1-CORRECTIVE).** The runner retains no `CanonicalBuild` and no per-row object:
+  each member is processed exactly once — its rows are written, fed to the engine's bounded-memory
+  W2 composition (`nse_engine.w2_stream.W2Accumulator`), and released. Everything the accumulator
+  keeps is exact and packed: one `array('I')` with seven uint32 per row, one row index per row, one
+  index per identity, and **one interned copy of each distinct value** shared with the D01 metric
+  fold (normalized ISIN and symbol tables), plus one `array('Q')` for the D01 symbol/series pairs.
+  Measured retained state (synthetic corpora; `tests/test_w2_stream_memory.py`):
+
+  | Shape | rows | identities | retained | bytes/row | bytes/identity |
+  |---|---|---|---|---|---|
+  | A repeated identities/observations | 200,000 | 2,000 | 8.0 MB | 40.2 | 4,019.8 |
+  | B identity-dominated (corpus worst case) | 200,000 | 200,000 | 63.8 MB | 319.2 | 319.2 |
+  | C mixed | 200,000 | 50,000 | 14.9 MB | 74.4 | 297.6 |
+
+  Corpus-shape projection (the authoritative acceptance model, worst case = one distinct ISIN
+  **and** symbol per row, rows = 5,689,949 D01-exact; runner allowance = the measured single-member
+  transient at the corpus's largest member, 3,704 rows, ×1.5): **≈1.82 GB accumulator + ≈0.08 GB
+  runner ≈ 1.90 GB ≤ 2.5 GB**. Any realistic identity profile is smaller; the unresolved item is
+  the corpus's true distinct-identity count, which the accessible evidence does not contain (the
+  equity master is GATED). The pre-corrective revision measured ≈760 B/row and projected ≈4.33 GB;
+  the pre-streaming design retained ≈7.1 kB/row and projected ≈40 GB — the failure the failed
+  Windows run exhibited. Per-member transients (one member's parse + serialization) are bounded by
+  the largest member (≈70 MB at 3,704 rows) and are released before the next member is read.
+  A runtime identity-count/memory gate remains a separate fail-closed execution safeguard, not a
+  substitute for this acceptance evidence.* **Time.** Preflight reads every archive once (hash + structure) and processing reads each
   archive again (member bytes + drift hash): roughly two full corpus passes, plus parsing.
 * **Corpus is read-only.** No code path opens a corpus file for writing; the D03 read-only
   guarantee is preserved.

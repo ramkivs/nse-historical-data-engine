@@ -28,10 +28,13 @@ from __future__ import annotations
 
 import datetime as _dt
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Iterable, Mapping, Optional, Sequence, Tuple
 
 from . import contract
 from .evidence_inputs import CalendarLabelRecord, CircularHolidayRecord, InventoryFileRecord
+
+if TYPE_CHECKING:  # pragma: no cover - typing only, avoids a runtime import cycle
+    from .rows import SecurityRow
 
 WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
 
@@ -47,6 +50,36 @@ class MemberDateFact:
     business_date: str
     format_family: str
     trad_dt_eq_biz_dt: Optional[bool] = None
+
+
+def member_date_fact(family: str, rows: Sequence["SecurityRow"]) -> MemberDateFact:
+    """The governed per-member date fact (D05 §3.4) — the single implementation.
+
+    ``trad_dt_eq_biz_dt`` is taken from the per-row comparison observation W1 already emits:
+    ``True`` only when every row of a UDiFF member reports verbatim text equality; ``None``
+    (undetermined) when any row's BizDt is blank, and ``None`` for legacy members (the legacy
+    schema has no BizDt at all). Nothing is defaulted.
+
+    ``family`` is the parse-level family (``MemberParse.header.family``); ``rows`` are the
+    member's canonical rows. W2 composition and the bounded-memory streaming composition both
+    call this function, so the rule exists exactly once (G-I4-M1).
+    """
+    business_date = rows[0].business_date if rows else ""
+    if family != contract.FAMILY_UDIFF:
+        return MemberDateFact(
+            business_date=business_date,
+            format_family=family,
+            trad_dt_eq_biz_dt=None,
+        )
+    comparisons = {dict(row.observations).get("bizdt_traddt_comparison") for row in rows}
+    # True only when every row of the member reports verbatim text equality; any other
+    # mixture (blank BizDt, multiple comparison outcomes) stays undetermined.
+    equality = True if rows and comparisons == {"verbatim_text_equality"} else None
+    return MemberDateFact(
+        business_date=business_date,
+        format_family=family,
+        trad_dt_eq_biz_dt=equality,
+    )
 
 
 @dataclass(frozen=True)

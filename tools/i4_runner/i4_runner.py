@@ -13,8 +13,10 @@ Boundary (non-production; RD-1..RD-10 as authorized):
   deterministic evidence — it reimplements **no** engine semantics (no parsing, header
   tolerance, field mapping, numeric, flag, calendar, identity, continuity, overlay, metric or
   serialization rule);
-* the engine is consumed unmodified (``build_canonical``, ``build_w2``,
-  ``rows_jsonl``, ``build_evidence``, ``tool_fingerprint``);
+* the engine is consumed unmodified (``build_canonical``, the bounded-memory W2 composition
+  ``nse_engine.w2_stream.W2Accumulator`` (calendar/metrics/identity), ``rows_jsonl``,
+  ``build_evidence``, ``tool_fingerprint``); no canonical build is retained after its member is
+  written and fed (G-I4-M1);
 * the retained package is clock-free; the only run-specific field anywhere in canonical
   output is ``provenance.run_id``;
 * no storage technology is selected, no API/UI/serving path exists, no network access occurs,
@@ -30,6 +32,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from dataclasses import dataclass
 
 if __name__ == "__main__" and not __package__:
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -48,10 +51,10 @@ else:
     import i4_reconcile as reconcile  # type: ignore
 
 from nse_engine import contract  # noqa: E402
+from nse_engine import w2_stream  # noqa: E402
 from nse_engine.pipeline import (  # noqa: E402
     DEFAULT_CONFIG,
     build_canonical,
-    build_w2,
 )
 from nse_engine.errors import NseEngineError  # noqa: E402
 from nse_engine.calendar import CalendarEvidenceError  # noqa: E402
@@ -61,6 +64,26 @@ from nse_engine.serialize import build_evidence, rows_jsonl  # noqa: E402
 EXIT_OK = 0
 EXIT_USAGE = 1
 EXIT_FAILED = 2
+
+
+@dataclass
+class W2Products:
+    """Everything the run writes from W2, produced by the engine (G-I4-M1).
+
+    The runner never computes a W2 result itself: the calendar, metrics and association
+    documents come from the engine's bounded-memory composition
+    (:class:`nse_engine.w2_stream.W2Accumulator`), and the two Tier-E censuses are the runner's
+    own additive counters over the same rows (identical payloads by construction: counting is
+    additive). ``identity_documents`` is the engine's ordered iterator, consumed exactly once.
+    """
+
+    calendar: object
+    metrics: object
+    associations: object  # nse_engine.identity.AssociationSummary
+    identity_stream: object  # nse_engine.identity.IdentityStream (consumed exactly once)
+    observations_total: int
+    flag_census: dict
+    governance_census: dict
 
 
 # ------------------------------------------------------------------ run
@@ -112,11 +135,16 @@ def run_command(args) -> int:
         stage = "processing"
         all_records = []
         input_manifest = []
-        builds = []
         partition_files = {}
         stems = set()
         rows_total = 0
         quarantined_total = 0
+        observations_total = 0
+        flag_counts = {}
+        governance_counts = {}
+        # Bounded-memory W2 composition: one member is fed to the engine accumulator and then
+        # released. No CanonicalBuild is retained (G-I4-M1).
+        accumulator = w2_stream.W2Accumulator()
         for index, archive in enumerate(outcome.archives, start=1):
             record = outcome.inventory_index[(archive.root, archive.relative_path)]
             member_name = outcome.member_names[archive.path]
@@ -200,25 +228,35 @@ def run_command(args) -> int:
                 }
             )
             all_records.extend(records)
-            builds.append(build)
             rows_total += len(build.rows)
             quarantined_total += report["quarantined"]
+            observations_total += len(build.observations)
+            for name, count in reconcile.flag_census(build.rows).items():
+                flag_counts[name] = flag_counts.get(name, 0) + count
+            for name, count in reconcile.governance_dependency_census(build.rows).items():
+                governance_counts[name] = governance_counts.get(name, 0) + count
+            accumulator.add_member(build.rows, report["format_family"])
+            del build
             processed = index
             if index % 250 == 0 or index == len(outcome.archives):
                 print("  processed %d/%d archives" % (index, len(outcome.archives)))
 
         stage = "w2"
-        # The engine's W2 composition takes the canonical builds themselves; the engine derives
-        # the member-date facts from those builds. Nothing about W2 is reconstructed here (F2).
-        w2 = build_w2(
-            tuple(builds),
-            inputs.to_inventory_records(outcome.inventory_records),
-            labels=tuple(labels),
-            circular_holidays=tuple(holidays),
+        # The engine's bounded-memory composition derives the member-date facts, the metric fold
+        # and the dated associations from the rows that were fed to it per member; the calendar
+        # comes from the engine's own derive_calendar(). Nothing about W2 is reconstructed here.
+        products = _w2_products(
+            accumulator,
+            outcome,
+            labels,
+            holidays,
+            observations_total,
+            flag_counts,
+            governance_counts,
         )
-        fold, corpus_records = _corpus_reconciliation(declaration, outcome, w2)
+        fold, corpus_records = _corpus_reconciliation(declaration, outcome, products)
         all_records.extend(corpus_records)
-        _write_w2(writer, w2, fold)
+        _write_w2(writer, products, fold)
         writer.write_jsonl("RECONCILIATION.jsonl", all_records)
         writer.write_jsonl("INPUT_MANIFEST.jsonl", input_manifest)
         print(
@@ -316,7 +354,7 @@ def run_command(args) -> int:
                     "members": len(outcome.archives),
                     "rows": rows_total,
                     "quarantined": quarantined_total,
-                    "observations": len(w2.observations),
+                    "observations": observations_total,
                     "data_lines": sum(item["data_lines"] for item in input_manifest),
                 },
                 "engine_identity": engine_identity,
@@ -446,7 +484,32 @@ def _labels_facts(declaration, document) -> tuple:
     return tuple(facts)
 
 
-def _corpus_reconciliation(declaration, outcome, w2):
+def _w2_products(accumulator, outcome, labels, holidays, observations_total, flag_counts,
+                 governance_counts) -> "W2Products":
+    """Assemble the run's W2 outputs from the engine's bounded-memory composition.
+
+    Every governed value here is produced by the engine: the calendar by
+    ``derive_calendar()`` (reached through ``W2Accumulator.calendar``), the metric fold by the
+    engine's row-metric accumulator, and the association summary/identity stream by the engine's
+    association accumulator. The Tier-E censuses are additive runner counters over the same rows
+    (counting is additive, so the payload is identical to a full pass).
+    """
+    return W2Products(
+        calendar=accumulator.calendar(
+            inputs.to_inventory_records(outcome.inventory_records),
+            labels=tuple(labels),
+            circular_holidays=tuple(holidays),
+        ),
+        metrics=accumulator.metrics(),
+        associations=accumulator.association_summary(),
+        identity_stream=accumulator.identity_stream(),
+        observations_total=observations_total,
+        flag_census=flag_counts,
+        governance_census=governance_counts,
+    )
+
+
+def _corpus_reconciliation(declaration, outcome, products):
     records = []
     fold = None
     if outcome.present_inputs.get("d01_metric_evidence"):
@@ -455,7 +518,7 @@ def _corpus_reconciliation(declaration, outcome, w2):
         records.extend(
             reconcile.tier_c_corpus_fold(
                 fold,
-                w2.metrics.to_dict(),
+                products.metrics.to_dict(),
                 _path_label(declaration, declaration.d01_metrics),
             )
         )
@@ -466,7 +529,6 @@ def _corpus_reconciliation(declaration, outcome, w2):
                 verdict_document, fold, _path_label(declaration, declaration.d01_metrics)
             )
         )
-    rows = w2.rows
     records.append(
         reconcile.make_record(
             reconcile.TIER_E,
@@ -475,7 +537,7 @@ def _corpus_reconciliation(declaration, outcome, w2):
             "count of canonical rows carrying each governed validity flag",
             "D05 §5 flags (informational; no flag gates anything; GATING_FLAG_NAMES is empty)",
             None,
-            reconcile.flag_census(rows),
+            dict(products.flag_census),
             reconcile.OBSERVED,
             reconcile.NON_GATING,
             note="observed census only; no D01 counterpart is asserted",
@@ -489,7 +551,7 @@ def _corpus_reconciliation(declaration, outcome, w2):
             "count of canonical rows carrying each unresolved-semantics identifier",
             "D07 §9 / D08 §18 (carried, never resolved)",
             None,
-            reconcile.governance_dependency_census(rows),
+            dict(products.governance_census),
             reconcile.OBSERVED,
             reconcile.NON_GATING,
             note="unresolved-state evidence (MD-11 #9)",
@@ -498,24 +560,27 @@ def _corpus_reconciliation(declaration, outcome, w2):
     return fold, tuple(records)
 
 
-def _write_w2(writer, w2, fold) -> None:
-    rows = w2.rows
+def _write_w2(writer, products, fold) -> None:
     calendar_path = "w2/calendar.jsonl"
-    for day in w2.calendar.days:
+    for day in products.calendar.days:
         writer.append_jsonl(calendar_path, day.to_dict())
-    for identity_entry in w2.associations.identities:
+    # The engine's identity stream is consumed exactly once, writing one document at a time; the
+    # totals counters are accumulated by the same single pass (G-I4-M1 §ENGINE BOUNDARY E).
+    stream = products.identity_stream
+    for identity_entry in stream:
         writer.append_jsonl("w2/associations.jsonl", identity_entry.to_dict())
+    totals = stream.totals()
     writer.close_jsonl()
     writer.write_json(
         "w2/identity_summary.json",
         {
-            "method": w2.associations.method,
-            "totals": w2.associations.totals(),
+            "method": products.associations.method,
+            "totals": totals,
             "overlay_rows_excluded": [
                 {"series": series, "rows": count}
-                for series, count in w2.associations.overlay_rows_excluded
+                for series, count in products.associations.overlay_rows_excluded
             ],
-            "unkeyed": [group.to_dict() for group in w2.associations.unkeyed],
+            "unkeyed": [group.to_dict() for group in products.associations.unkeyed],
             "non_promotion_note": contract.IDENTITY_NON_PROMOTION_NOTE,
             "interval_rule": contract.ASSOCIATION_INTERVAL_RULE,
         },
@@ -523,20 +588,20 @@ def _write_w2(writer, w2, fold) -> None:
     writer.write_json(
         "w2/metrics.json",
         {
-            "row_metrics": w2.metrics.to_dict(),
-            "calendar_totals": w2.calendar.totals(),
-            "label_status_counts": dict(w2.calendar.label_status_counts()),
+            "row_metrics": products.metrics.to_dict(),
+            "calendar_totals": products.calendar.totals(),
+            "label_status_counts": dict(products.calendar.label_status_counts()),
             "d01_metric_fold": fold,
         },
     )
-    for record in _unresolved_records(w2, rows):
+    for record in _unresolved_records(products, totals["identities"]):
         writer.append_jsonl("w2/unresolved.jsonl", record)
     writer.close_jsonl()
 
 
-def _unresolved_records(w2, rows) -> tuple:
+def _unresolved_records(products, identity_count) -> tuple:
     records = []
-    census = reconcile.governance_dependency_census(rows)
+    census = products.governance_census
     for dependency_id in sorted(census):
         records.append(
             {
@@ -550,12 +615,12 @@ def _unresolved_records(w2, rows) -> tuple:
     records.append(
         {
             "kind": "calendar-label-status-counts",
-            "counts": dict(w2.calendar.label_status_counts()),
+            "counts": dict(products.calendar.label_status_counts()),
             "unresolved_dependency": contract.CALENDAR_UNRESOLVED_DEPENDENCY,
             "state": "legacy-era gaps are not retrieved and their causes are never invented",
         }
     )
-    for date in w2.calendar.unresolved_dates():
+    for date in products.calendar.unresolved_dates():
         records.append(
             {
                 "kind": "calendar-unresolved-date",
@@ -569,17 +634,17 @@ def _unresolved_records(w2, rows) -> tuple:
     records.append(
         {
             "kind": "identity-non-promotion",
-            "identities": w2.associations.totals()["identities"],
+            "identities": identity_count,
             "note": contract.IDENTITY_NON_PROMOTION_NOTE,
             "state": "correlation key is not promoted to exchange-authoritative identity",
         }
     )
-    if w2.calendar.days:
+    if products.calendar.days:
         records.append(
             {
                 "kind": "cross-era-boundary-residual",
-                "first_date": w2.calendar.first_date,
-                "last_date": w2.calendar.last_date,
+                "first_date": products.calendar.first_date,
+                "last_date": products.calendar.last_date,
                 "note": (
                     "cross-era continuity policy is UNINTERPRETED (D08 §18); the run makes no "
                     "continuity claim and resolves no residual"

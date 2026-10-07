@@ -30,8 +30,10 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from nse_engine import contract  # noqa: E402
+from nse_engine import w2_stream  # noqa: E402
 from nse_engine.evidence_inputs import INVENTORY_ROOT_TO_FAMILY  # noqa: E402
-from nse_engine.pipeline import CanonicalBuild, build_w2  # noqa: E402
+from nse_engine.pipeline import build_w2  # noqa: E402
+from nse_engine.rows import SecurityRow  # noqa: E402
 from tests import support  # noqa: E402
 
 from tools.i4_runner import (  # noqa: E402
@@ -47,8 +49,19 @@ GOVERNED_INVENTORY = os.path.join(REPO_ROOT, "evidence", "inventory", "file_inve
 GOVERNED_INVENTORY_LF_SHA256 = (
     "336b9531cd34f48e9a2e7e7593cc4e9c2736b3864d8213bc65d6ab8b488729d2"
 )
+#: G-I4-M1-CORRECTIVE engine revision: the bounded-memory W2 composition's retained state was
+#: compacted (``compact`` joined ``ENGINE_MODULES``; the metric fold and the association chain now
+#: share interned tokens, and the association store is one packed row array with index arrays), so
+#: the governed engine fingerprint was recalculated. Previous revisions' values:
+#: ``7bee84902f8cb0e5c60703acbe1b17d6e85a9b9762289bab1741d9f003df5a52`` (pre-M1) and
+#: ``af82485ef4acb82c8e4164b4d39805a2034da00991f27a80ab2fd3a70d613ad2`` (M1, superseded).
 GOVERNED_TOOL_FINGERPRINT = (
-    "7bee84902f8cb0e5c60703acbe1b17d6e85a9b9762289bab1741d9f003df5a52"
+    "d3269b731008a0d544eaa7e96d6c6b75cf94dfd6ce31d8fb5e1f23fdf10a80e9"
+)
+
+#: G-I4-M1 runner revision: ``i4_runner.py`` now feeds and releases one member at a time.
+GOVERNED_RUNNER_FINGERPRINT = (
+    "f3ebf62488716ea3f4fff76b104760dfee7df45c81af253a4faf352beb624c4a"
 )
 
 LEGACY_INDEX = {name: index for index, name in enumerate(contract.LEGACY_HEADER_FIELDS)}
@@ -342,6 +355,9 @@ class RunnerIdentityTests(RunnerTestCase):
         hits = i4_preflight.source_token_hits(copy_dir)
         self.assertTrue(hits)
         self.assertEqual(hits[0][2], "time" + ".time(")
+
+    def test_runner_identity_matches_the_governed_revision(self):
+        self.assertEqual(i4_identity.runner_fingerprint(), GOVERNED_RUNNER_FINGERPRINT)
 
     def test_engine_identity_matches_the_governed_baseline(self):
         self.assertEqual(i4_identity.engine_fingerprint(), GOVERNED_TOOL_FINGERPRINT)
@@ -1126,118 +1142,175 @@ class FailureRetentionTests(RunnerTestCase):
 
 
 class W2InterfaceTests(RunnerTestCase):
-    """The engine's W2 composition must receive the engine's own canonical builds."""
+    """The engine's bounded-memory W2 composition receives the engine's own rows (G-I4-M1).
 
-    def capture_builds(self, corpus, out, run_id="i4-w2"):
-        """Run the CLI with ``build_w2`` wrapped, returning (exit code, captured builds)."""
+    The runner retains no ``CanonicalBuild``: each member's rows are fed to the engine's
+    ``W2Accumulator`` and then released. These pins hold the boundary — every W2 value in the
+    package is produced by the engine, the runner reconstructs nothing, and no fabricated
+    row-holder can satisfy the engine.
+    """
+
+    def capture_feeds(self, corpus, out, run_id="i4-w2"):
+        """Run the CLI with ``W2Accumulator.add_member`` wrapped (engine class, not runner code).
+
+        Returns ``(exit code, [(rows, family), ...])`` in the order the engine received them.
+        """
         captured = []
-        real_build_w2 = build_w2
+        real_add_member = w2_stream.W2Accumulator.add_member
 
-        def spy(builds, inventory, **kwargs):
-            captured.append(tuple(builds))
-            return real_build_w2(builds, inventory, **kwargs)
+        def spy(self, rows, family):
+            captured.append((rows, family))
+            return real_add_member(self, rows, family)
 
-        i4_runner.build_w2 = spy
-        self.addCleanup(lambda: setattr(i4_runner, "build_w2", real_build_w2))
+        w2_stream.W2Accumulator.add_member = spy
+        self.addCleanup(lambda: setattr(w2_stream.W2Accumulator, "add_member", real_add_member))
         code = self.invoke(corpus.run_args(out, run_id=run_id))
         return code, captured
 
-    def test_build_w2_receives_canonical_builds_not_a_substitute(self):
+    def test_members_are_fed_to_the_engine_accumulator_one_at_a_time(self):
         corpus = self.make_corpus()
         out = self.out_dir()
-        code, captured = self.capture_builds(corpus, out)
+        code, feeds = self.capture_feeds(corpus, out)
         self.assertEqual(code, i4_runner.EXIT_OK, self.last_stderr)
-        self.assertEqual(len(captured), 1, "exactly one W2 composition per run")
-        builds = captured[0]
-        self.assertEqual(len(builds), 4)
-        for build in builds:
-            self.assertIsInstance(build, CanonicalBuild)
-            # the engine's own structure must be intact on every object handed to W2
-            self.assertTrue(hasattr(build, "observations"))
-            self.assertTrue(hasattr(build, "parse"))
-            self.assertTrue(hasattr(build, "rows"))
+        self.assertEqual(len(feeds), 4, "one engine feed per discovered member")
+        for rows, family in feeds:
+            self.assertTrue(rows, "the engine receives the member's canonical rows")
+            self.assertIsInstance(rows, tuple)
+            for row in rows:
+                self.assertIsInstance(row, SecurityRow)
+            self.assertIn(family, (contract.FAMILY_LEGACY, contract.FAMILY_UDIFF))
 
-    def test_engine_w2_result_is_usable_and_only_engine_values_are_reported(self):
+    def test_engine_composition_over_the_fed_rows_reproduces_the_package(self):
+        """An independent engine composition over the same rows must equal the written package."""
         corpus = self.make_corpus()
         out = self.out_dir()
-        code, captured = self.capture_builds(corpus, out)
+        code, feeds = self.capture_feeds(corpus, out)
         self.assertEqual(code, i4_runner.EXIT_OK, self.last_stderr)
-        builds = captured[0]
-        # the engine composes W2 from these very objects: its aggregate views must work
-        w2 = build_w2(builds, i4_inputs.to_inventory_records(tuple(corpus.records)))
-        self.assertEqual(len(w2.observations), sum(len(b.observations) for b in builds))
-        self.assertEqual(len(w2.rows), sum(len(b.rows) for b in builds))
+
+        # snapshot first: the spy stays installed for the rest of the test and appends to feeds
+        feed_snapshot = list(feeds)
+        accumulator = w2_stream.W2Accumulator()
+        for rows, family in feed_snapshot:
+            accumulator.add_member(rows, family)
+        calendar = accumulator.calendar(
+            i4_inputs.to_inventory_records(tuple(corpus.records))
+        )
+        metrics = accumulator.metrics()
+        stream = accumulator.identity_stream()
+        identities = [document.to_dict() for document in stream]
+        totals = stream.totals()
+
+        written_calendar = [
+            json.loads(line) for line in
+            open(os.path.join(out, "w2", "calendar.jsonl"), encoding="utf-8").read().splitlines()
+            if line.strip()
+        ]
+        written_identities = [
+            json.loads(line) for line in
+            open(os.path.join(out, "w2", "associations.jsonl"), encoding="utf-8").read().splitlines()
+            if line.strip()
+        ]
+        summary = self.read_json(os.path.join(out, "w2", "identity_summary.json"))
+        metrics_document = self.read_json(os.path.join(out, "w2", "metrics.json"))
         record = self.read_json(os.path.join(out, "RUN_RECORD.json"))
-        self.assertEqual(record["counts"]["observations"], len(w2.observations))
-        self.assertEqual(record["counts"]["rows"], len(w2.rows))
-        self.assertEqual(record["counts"]["members"], len(builds))
 
-    def test_a_row_only_substitute_is_pinned_as_broken(self):
+        self.assertEqual(written_calendar, [day.to_dict() for day in calendar.days])
+        self.assertEqual(written_identities, identities)
+        self.assertEqual(summary["totals"], totals)
+        self.assertEqual(summary["method"], accumulator.association_summary().method)
+        self.assertEqual(metrics_document["row_metrics"], metrics.to_dict())
+        self.assertEqual(record["counts"]["members"], len(feed_snapshot))
+        self.assertEqual(record["counts"]["rows"], sum(len(rows) for rows, _f in feed_snapshot))
+        # the runner's observation counter is the additive sum of the engine's per-member
+        # observation tuples; the dedicated pin below compares it against an independent build
+        self.assertGreaterEqual(record["counts"]["observations"], 0)
+
+    def test_observations_counter_is_additive_over_engine_member_counts(self):
+        corpus = self.make_corpus()
+        out = self.out_dir()
+        code, _feeds = self.capture_feeds(corpus, out)
+        self.assertEqual(code, i4_runner.EXIT_OK, self.last_stderr)
+        record = self.read_json(os.path.join(out, "RUN_RECORD.json"))
+        # the runner only sums each member's engine-derived observation tuple length; an
+        # independent batch composition over the same members must agree exactly
+        builds = []
+        index = i4_inputs.inventory_index(i4_inputs.load_inventory(corpus.inventory_path))
+        for archive in i4_inputs.discover_archives(
+            {"LEGACY": corpus.legacy_root, "UDIFF": corpus.udiff_root}
+        ):
+            record_entry = index[(archive.root, archive.relative_path)]
+            member = i4_inputs.member_identity(archive.path)
+            data = i4_inputs.read_member_bytes(archive.path, member)
+            builds.append(i4_runner.build_canonical(
+                data, i4_inputs.build_source(record_entry, member, "i4-pin"),
+                i4_runner.DEFAULT_CONFIG,
+            ))
+        self.assertEqual(
+            record["counts"]["observations"], sum(len(build.observations) for build in builds)
+        )
+        self.assertEqual(record["counts"]["rows"], sum(len(build.rows) for build in builds))
+
+    def test_a_row_only_substitute_cannot_satisfy_the_engine(self):
         """Regression pin: the substituted holder the audit found cannot satisfy the engine.
 
-        With ``member_facts`` supplied by the caller (the old compensation), a row-only holder
-        silently yields a W2 object whose aggregate views raise — which is why the runner now
-        passes the engine's own builds and lets the engine derive the facts.
+        The engine derives member facts from real builds and reads real canonical rows; a
+        row-only holder fails outright, and the runner never constructs one.
         """
         import dataclasses
 
         corpus = self.make_corpus()
+        builds = []
+        index = i4_inputs.inventory_index(i4_inputs.load_inventory(corpus.inventory_path))
+        for archive in i4_inputs.discover_archives(
+            {"LEGACY": corpus.legacy_root, "UDIFF": corpus.udiff_root}
+        ):
+            record_entry = index[(archive.root, archive.relative_path)]
+            member = i4_inputs.member_identity(archive.path)
+            data = i4_inputs.read_member_bytes(archive.path, member)
+            builds.append(i4_runner.build_canonical(
+                data, i4_inputs.build_source(record_entry, member, "i4-pin"),
+                i4_runner.DEFAULT_CONFIG,
+            ))
 
         @dataclasses.dataclass(frozen=True)
         class RowOnlyHolder:
             rows: tuple
 
-        # rebuild the same member data through the runner's own input path
-        builds = []
-        inventory_records = i4_inputs.load_inventory(corpus.inventory_path)
-        index = i4_inputs.inventory_index(inventory_records)
-        for archive in i4_inputs.discover_archives(
-            {"LEGACY": corpus.legacy_root, "UDIFF": corpus.udiff_root}
-        ):
-            record = index[(archive.root, archive.relative_path)]
-            member = i4_inputs.member_identity(archive.path)
-            data = i4_inputs.read_member_bytes(archive.path, member)
-            builds.append(
-                i4_runner.build_canonical(
-                    data, i4_inputs.build_source(record, member, "i4-pin"), i4_runner.DEFAULT_CONFIG
-                )
-            )
-
-        # the engine's own objects satisfy the contract
-        engine_w2 = build_w2(tuple(builds), i4_inputs.to_inventory_records(inventory_records))
+        # the engine's own builds satisfy the reference composition
+        engine_w2 = build_w2(tuple(builds), i4_inputs.to_inventory_records(tuple(corpus.records)))
         self.assertEqual(len(engine_w2.observations), sum(len(b.observations) for b in builds))
 
-        # a row-only substitute does not: without member_facts the engine rejects it outright
-        holders = tuple(RowOnlyHolder(b.rows) for b in builds)
+        # a row-only substitute does not: the reference composition reads the parse result
+        holders = tuple(RowOnlyHolder(build.rows) for build in builds)
         with self.assertRaises(AttributeError):
-            build_w2(holders, i4_inputs.to_inventory_records(inventory_records))
+            build_w2(holders, i4_inputs.to_inventory_records(tuple(corpus.records)))
 
-        # and with caller-supplied facts (the previous compensation) the returned W2 object is
-        # internally broken — exactly the defect the correction removes
-        from nse_engine.pipeline import member_date_facts
+        # and the streaming composition cannot be fed objects that are not engine rows either
+        accumulator = w2_stream.W2Accumulator()
+        with self.assertRaises((AttributeError, TypeError)):
+            accumulator.add_member([object()], contract.FAMILY_LEGACY)
 
-        compensated = build_w2(
-            holders,
-            i4_inputs.to_inventory_records(inventory_records),
-            member_facts=member_date_facts(tuple(builds)),
-        )
-        with self.assertRaises(AttributeError):
-            compensated.observations
-
-    def test_no_runner_side_w2_reconstruction_remains(self):
-        import re
-
+        # the previous compensation is gone from the runner and its call site cannot recur
         with open(os.path.join(REPO_ROOT, "tools", "i4_runner", "i4_runner.py"),
                   encoding="utf-8") as handle:
             source = handle.read()
-        self.assertNotIn("MemberRows", source)
         self.assertNotIn("member_facts=", source)
-        self.assertNotRegex(source, r"observations_total")
-        # the W2 call site passes the builds and no precomputed member-fact substitute
-        call = re.search(r"w2 = build_w2\((.*?)\n        \)", source, re.S)
-        self.assertIsNotNone(call)
-        self.assertIn("tuple(builds)", call.group(1))
-        self.assertNotIn("member_facts", call.group(1))
+        self.assertNotIn("MemberRows", source)
+        self.assertNotIn("RowOnlyHolder", source)
+
+    def test_no_runner_side_w2_reconstruction_remains(self):
+        with open(os.path.join(REPO_ROOT, "tools", "i4_runner", "i4_runner.py"),
+                  encoding="utf-8") as handle:
+            source = handle.read()
+        # no retained builds and no batch composition call: the engine's accumulator is consumed
+        self.assertNotIn("builds = []", source)
+        self.assertNotIn("build_w2(", source)
+        self.assertIn("w2_stream.W2Accumulator()", source)
+        self.assertIn("accumulator.identity_stream()", source)
+        # the runner reads W2 values off engine objects only
+        self.assertIn("products.calendar", source)
+        self.assertIn("products.metrics", source)
+        self.assertIn("products.associations", source)
 
 
 # ------------------------------------------------------------------ all-quarantined member (F3)

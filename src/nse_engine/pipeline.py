@@ -17,7 +17,8 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 from . import contract
-from .calendar import CalendarResult, MemberDateFact, derive_calendar
+from . import w2_stream
+from .calendar import CalendarResult, MemberDateFact, derive_calendar, member_date_fact
 from .evidence_inputs import (
     CalendarLabelRecord,
     CircularHolidayRecord,
@@ -126,36 +127,12 @@ def build_canonical(
 def member_date_facts(builds: Tuple[CanonicalBuild, ...]) -> Tuple[MemberDateFact, ...]:
     """Derive per-date member facts from parsed builds (only what a parsed member can show).
 
-    ``trad_dt_eq_biz_dt`` is taken from the per-row comparison observation W1 already emits:
-    ``True`` only when every row of a UDiFF member reports verbatim text equality; ``None``
-    (undetermined) when any row's BizDt is blank, and ``None`` for legacy members (the legacy
-    schema has no BizDt at all). Nothing is defaulted.
+    The governed rule lives in :func:`nse_engine.calendar.member_date_fact` and is shared with the
+    bounded-memory streaming composition (G-I4-M1), so it exists exactly once.
     """
-    facts = []
-    for build in builds:
-        family = build.parse.header.family
-        if family != contract.FAMILY_UDIFF:
-            facts.append(
-                MemberDateFact(
-                    business_date=build.rows[0].business_date if build.rows else "",
-                    format_family=family,
-                    trad_dt_eq_biz_dt=None,
-                )
-            )
-            continue
-        comparisons = {
-            dict(row.observations).get("bizdt_traddt_comparison") for row in build.rows
-        }
-        # True only when every row of the member reports verbatim text equality; any other
-        # mixture (blank BizDt, multiple comparison outcomes) stays undetermined.
-        equality = True if build.rows and comparisons == {"verbatim_text_equality"} else None
-        facts.append(
-            MemberDateFact(
-                business_date=build.rows[0].business_date if build.rows else "",
-                format_family=family,
-                trad_dt_eq_biz_dt=equality,
-            )
-        )
+    facts = [
+        member_date_fact(build.parse.header.family, build.rows) for build in builds
+    ]
     return tuple(fact for fact in facts if fact.business_date)
 
 
@@ -203,12 +180,19 @@ def build_w2(
 
     Deterministic and IO-free: identical builds + identical evidence inputs yield identical
     calendar, association and metric results (D05 §9; W2 prompt §10 F).
+
+    Composition is expressed over :class:`nse_engine.w2_stream.W2Accumulator`, which is also what
+    the bounded-memory runner path consumes, so the batch and streaming paths share one
+    implementation of every W2 rule (G-I4-M1). ``W2Build`` still carries the builds it was given:
+    ``.rows`` / ``.observations`` remain available to callers that hold them.
     """
-    rows = tuple(row for build in builds for row in build.rows)
-    facts = member_date_facts(builds) if member_facts is None else member_facts
+    accumulator = w2_stream.W2Accumulator()
+    for build in builds:
+        accumulator.add_member(build.rows, build.parse.header.family)
+    facts = accumulator.member_facts() if member_facts is None else member_facts
     return W2Build(
         builds=tuple(builds),
         calendar=derive_calendar(inventory, labels, circular_holidays, facts),
-        associations=build_associations(rows),
-        metrics=compute_row_metrics(rows),
+        associations=accumulator.association_build(),
+        metrics=accumulator.metrics(),
     )

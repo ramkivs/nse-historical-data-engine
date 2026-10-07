@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from typing import Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
 from . import contract
+from .compact import RowTokens, TokenIntern, Uint64Set, normalize_upper_trim
 from .evidence_inputs import FileMetricRecord, InventoryFileRecord, INVENTORY_ROOT_TO_FAMILY
 from .rows import SecurityRow
 
@@ -51,54 +52,109 @@ class RowMetrics:
 
 
 def _norm(value: Optional[str]) -> str:
-    return (value or "").strip().upper()
+    """The governed normalization — one implementation, shared with the association chain."""
+    return normalize_upper_trim(value)
 
 
 def _is_blank(value: Optional[str]) -> bool:
-    return (value or "").strip() == ""
+    return normalize_upper_trim(value) == ""
+
+
+class RowMetricAccumulator:
+    """Incremental D01 level-A fold (G-I4-M1; compacted in G-I4-M1-CORRECTIVE).
+
+    This class *is* the D01 level-A formula: :func:`compute_row_metrics` is a thin wrapper
+    around it, so the governed formula exists exactly once. Every retained structure is exact and
+    bounded by the number of **distinct values** the corpus contains, never by the row count:
+
+    * five scalars (rows, blank/non-blank ISIN rows, blank symbol rows);
+    * the shared :class:`~nse_engine.compact.RowTokens` tables: ``len(tokens.isin)`` is
+      ``distinct_nonblank_isin`` and the interned non-blank symbol counter is
+      ``distinct_nonblank_symbol`` (the metric fold previously kept two duplicate
+      ``set[str]`` copies of exactly these values);
+    * one :class:`~nse_engine.compact.Uint64Set` of ``(symbol_id, series_id)`` pairs for
+      ``distinct_symbol_series_pairs`` — previously a ``set`` of ``(str, str)`` tuples, i.e. one
+      boxed tuple plus two boxed strings per distinct pair.
+
+    ``symbol_series_duplicate_rows`` stays exact: every row contributes to exactly one pair, so
+    ``sum(count - 1) == rows - len(pairs)``.
+
+    When ``tokens`` is supplied the metric fold and the association accumulator share one copy of
+    every distinct ISIN and symbol; when it is omitted the accumulator owns a private set (the
+    standalone ``compute_row_metrics`` path is unchanged).
+    """
+
+    __slots__ = (
+        "_pairs",
+        "_series",
+        "blank_isin",
+        "blank_symbol",
+        "nonblank_isin",
+        "rows",
+        "tokens",
+    )
+
+    #: pair key stride: ``symbol_id * _SERIES_STRIDE + series_id`` (both ids are uint32)
+    _SERIES_STRIDE = 1 << 32
+
+    def __init__(self, tokens: "RowTokens | None" = None) -> None:
+        self.tokens = tokens if tokens is not None else RowTokens()
+        self.rows = 0
+        self.blank_symbol = 0
+        self.blank_isin = 0
+        self.nonblank_isin = 0
+        self._series = TokenIntern()
+        self._pairs = Uint64Set()
+
+    def add_row(self, row: SecurityRow) -> None:
+        symbol = row.listing_symbol
+        isin = row.security_isin
+        series = row.series
+        self.rows += 1
+        normal_symbol = _norm(symbol)
+        if not normal_symbol:
+            self.blank_symbol += 1
+        symbol_id = self.tokens.symbol_id(normal_symbol)
+        normal_isin = _norm(isin)
+        if not normal_isin:
+            self.blank_isin += 1
+        else:
+            self.nonblank_isin += 1
+            self.tokens.isin_id(normal_isin)
+        series_id = self._series.id((series or "").strip())
+        self._pairs.add(symbol_id * self._SERIES_STRIDE + series_id)
+
+    def add_rows(self, rows: Sequence[SecurityRow]) -> None:
+        for row in rows:
+            self.add_row(row)
+
+    def result(self) -> "RowMetrics":
+        """The governed ``RowMetrics`` values tuple (same names, same order, same assertion)."""
+        distinct_isin = len(self.tokens.isin)
+        distinct_symbol = self.tokens.distinct_symbol_count()
+        distinct_pairs = len(self._pairs)
+        duplicate_rows = self.rows - distinct_pairs
+        values = (
+            ("rows", self.rows),
+            ("blank_symbol_rows", self.blank_symbol),
+            ("blank_isin_rows", self.blank_isin),
+            ("nonblank_isin_rows", self.nonblank_isin),
+            ("distinct_nonblank_isin", distinct_isin),
+            ("isins_extra_duplicate_rows", self.nonblank_isin - distinct_isin),
+            ("distinct_nonblank_symbol", distinct_symbol),
+            ("distinct_symbol_series_pairs", distinct_pairs),
+            ("symbol_series_duplicate_rows", duplicate_rows),
+        )
+        if tuple(name for name, _value in values) != contract.D01_METRIC_NAMES:
+            raise AssertionError("metric set drifted from the governed D01 name set")
+        return RowMetrics(values=values)
 
 
 def compute_row_metrics(rows: Sequence[SecurityRow]) -> RowMetrics:
     """Apply the governed D01 formulas to canonical rows (exact, deterministic)."""
-    blank_symbol = 0
-    blank_isin = 0
-    nonblank_isin = 0
-    distinct_isin = set()
-    distinct_symbol = set()
-    pair_counts: Dict[Tuple[str, str], int] = {}
-
-    for row in rows:
-        symbol = row.listing_symbol
-        isin = row.security_isin
-        series = row.series
-        if _is_blank(symbol):
-            blank_symbol += 1
-        if _is_blank(isin):
-            blank_isin += 1
-        else:
-            nonblank_isin += 1
-            distinct_isin.add(_norm(isin))
-        normal_symbol = _norm(symbol)
-        if normal_symbol:
-            distinct_symbol.add(normal_symbol)
-        pair = (normal_symbol, (series or "").strip())
-        pair_counts[pair] = pair_counts.get(pair, 0) + 1
-
-    duplicate_rows = sum(count - 1 for count in pair_counts.values())
-    values = (
-        ("rows", len(rows)),
-        ("blank_symbol_rows", blank_symbol),
-        ("blank_isin_rows", blank_isin),
-        ("nonblank_isin_rows", nonblank_isin),
-        ("distinct_nonblank_isin", len(distinct_isin)),
-        ("isins_extra_duplicate_rows", nonblank_isin - len(distinct_isin)),
-        ("distinct_nonblank_symbol", len(distinct_symbol)),
-        ("distinct_symbol_series_pairs", len(pair_counts)),
-        ("symbol_series_duplicate_rows", duplicate_rows),
-    )
-    if tuple(name for name, _value in values) != contract.D01_METRIC_NAMES:
-        raise AssertionError("metric set drifted from the governed D01 name set")
-    return RowMetrics(values=values)
+    accumulator = RowMetricAccumulator()
+    accumulator.add_rows(rows)
+    return accumulator.result()
 
 
 @dataclass(frozen=True)
