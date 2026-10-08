@@ -433,6 +433,8 @@ class WindowsSelfTestContractTests(unittest.TestCase):
                 continue
             if item == "2462" or item == "i4-20261008" or item == "15000000000":
                 continue
+            with self.subTest(value=item[:60]):
+                self.assertIn(item, SELF_TEST_TEXT)
 
     def test_self_test_source_is_ascii_only(self):
         # Windows PowerShell 5.1 reads .ps1 as ANSI without a BOM; an ASCII-only source avoids

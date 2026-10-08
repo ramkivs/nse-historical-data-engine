@@ -132,7 +132,7 @@ if ($problems.Count -eq 0) {
             if ($rawJson.Trim() -eq "[]") { $got = @() }
             if ($rawJson.Trim() -ne "[]") {
                 try {
-                    $got = @(ConvertFrom-Json $rawJson)
+                    $got = @(ConvertFrom-Json $rawJson | ForEach-Object { $_ })
                 }
                 catch {
                     $parseOk = $false
