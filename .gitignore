@@ -18,6 +18,9 @@ venv/
 .env
 .env.*
 
+# Serving derived state (class 4 — rebuildable; never committed; D24)
+serving-state/
+
 # OS / editor
 .DS_Store
 Thumbs.db
