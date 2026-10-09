@@ -2,7 +2,8 @@
 
 The index is a pure derivation of the verified baseline: one linear pass over every
 class-(1) row file collecting, per row file, the set of (listing_symbol, series)
-instrument pairs present plus the row count. It stores no row values, no raw line
+instrument pairs present, the row count, and the minimum/maximum as-published
+``business_date`` (format serving-index/1.1). It stores no row values, no raw line
 text, and no clock/host/path value; identical baseline bytes yield a byte-identical
 index (D05 §9 conventions; MD-10 criteria 1/4).
 
@@ -23,7 +24,7 @@ from .baseline import Baseline
 
 INDEX_FILENAME = "serving_index.json"
 INDEX_DIGEST_FILENAME = "serving_index.sha256"
-INDEX_FORMAT = "serving-index/1.0"
+INDEX_FORMAT = "serving-index/1.1"
 
 
 class ServingIndexError(Exception):
@@ -68,7 +69,9 @@ def build_index(baseline: Baseline) -> dict:
     """One linear, read-only pass over the class-(1) row files.
 
     Deterministic: files are scanned in manifest order (already sorted), pair lists
-    are sorted, documents are canonically keyed, and no clock/host/path value is
+    are sorted, per-file date bounds are order-independent min/max over the
+    as-published ``business_date`` values (files without a dated row carry null
+    bounds), documents are canonically keyed, and no clock/host/path value is
     embedded. A row that fails to parse or lacks the contract keys is a package
     integrity failure (fail closed), never a silently skipped record.
     """
@@ -82,6 +85,8 @@ def build_index(baseline: Baseline) -> dict:
         stem = parts[4][: -len(".rows.jsonl")]
         pairs = set()
         count = 0
+        date_min: Optional[str] = None
+        date_max: Optional[str] = None
         with open(baseline.path(relative), "r", encoding="utf-8") as handle:
             for line in handle:
                 if not line.strip():
@@ -99,6 +104,12 @@ def build_index(baseline: Baseline) -> dict:
                 series = values.get("series") or ""
                 pairs.add((symbol, series))
                 count += 1
+                business_date = obj.get("business_date")
+                if isinstance(business_date, str) and business_date:
+                    if date_min is None or business_date < date_min:
+                        date_min = business_date
+                    if date_max is None or business_date > date_max:
+                        date_max = business_date
         rows_total += count
         pairs_list = sorted([list(pair) for pair in pairs])
         files[relative] = {
@@ -107,6 +118,8 @@ def build_index(baseline: Baseline) -> dict:
             "member_stem": stem,
             "row_count": count,
             "instruments": pairs_list,
+            "business_date_min": date_min,
+            "business_date_max": date_max,
         }
         for pair in pairs:
             global_pairs.add(pair)

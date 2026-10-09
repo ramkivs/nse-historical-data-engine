@@ -10,7 +10,9 @@ baseline package; the only writes are to the caller-supplied ``--state`` directo
 Commands:
   verify    verify a package against its manifests (and, with --m2, the pinned M2 pin)
   build     build the class-(4) index from the verified baseline into --state
-  query     run the Q3 instrument query (D16-10) and print canonical JSON to stdout
+  query     run the Q3 instrument query (symbol series) or the Q2 date-range
+            query (--from --to); exactly one mode per invocation
+  dataset   run the Q1 dataset/partition selection and yearly summaries
   rebuild   delete and rebuild the class-(4) state (delegated operation (b))
   info      print a diagnostic summary of the serving state
 
@@ -26,7 +28,14 @@ import sys
 
 from . import baseline as baseline_mod
 from .index import index_state, load_index, write_index, build_index, ServingIndexError
-from .query import QUERY_ID, query_instrument
+from .query import (
+    DATE_RANGE_QUERY_ID,
+    QUERY_ID,
+    QueryError,
+    query_date_range,
+    query_dataset_summary,
+    query_instrument,
+)
 from .rebuild import rebuild_state
 
 
@@ -82,14 +91,53 @@ def cmd_build(args) -> int:
 
 
 def cmd_query(args) -> int:
+    q2 = args.date_from is not None or args.date_to is not None
+    q3 = args.symbol is not None or args.series is not None
+    if q2 == q3:
+        _print_json(
+            {"result": "fail", "detail": "query requires exactly one of: symbol series (Q3) or --from and --to (Q2)"}
+        )
+        return 2
+    if q2 and (args.date_from is None or args.date_to is None):
+        _print_json({"result": "fail", "detail": "Q2 date-range query requires both --from and --to"})
+        return 2
+    if q3 and (args.symbol is None or args.series is None):
+        _print_json({"result": "fail", "detail": "Q3 instrument query requires both symbol and series"})
+        return 2
     try:
         handle = _open(args)
         document, _digest = load_index(args.state, handle)
-        rows = query_instrument(handle, document, args.symbol, args.series, year=args.year)
+        if q2:
+            rows = query_date_range(handle, document, args.date_from, args.date_to)
+            output = {
+                "query": DATE_RANGE_QUERY_ID,
+                "date_from": args.date_from,
+                "date_to": args.date_to,
+                "result_count": len(rows),
+                "rows": list(rows),
+            }
+        else:
+            rows = query_instrument(handle, document, args.symbol, args.series, year=args.year)
+            output = {"query": QUERY_ID, "result_count": len(rows), "rows": list(rows)}
     except (baseline_mod.BaselineError, ServingIndexError) as exc:
         _print_json({"result": "fail", "detail": str(exc)})
         return 3
-    _print_json({"query": QUERY_ID, "result_count": len(rows), "rows": list(rows)})
+    except QueryError as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return 2
+    _print_json(output)
+    return 0
+
+
+def cmd_dataset(args) -> int:
+    try:
+        handle = _open(args)
+        document, _digest = load_index(args.state, handle)
+        output = query_dataset_summary(document, family=args.family, year=args.year)
+    except (baseline_mod.BaselineError, ServingIndexError, QueryError) as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return 3
+    _print_json(output)
     return 0
 
 
@@ -132,12 +180,32 @@ def build_parser() -> argparse.ArgumentParser:
     add_common(p_build, state=True)
     p_build.set_defaults(func=cmd_build)
 
-    p_query = sub.add_parser("query", help="run the Q3 instrument query")
+    p_query = sub.add_parser("query", help="run the Q3 instrument query or the Q2 date-range query")
     add_common(p_query, state=True)
-    p_query.add_argument("symbol")
-    p_query.add_argument("series")
+    p_query.add_argument("symbol", nargs="?", default=None)
+    p_query.add_argument("series", nargs="?", default=None)
     p_query.add_argument("--year", type=int, default=None)
+    p_query.add_argument(
+        "--from",
+        dest="date_from",
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="Q2: inclusive range start (ISO business date)",
+    )
+    p_query.add_argument(
+        "--to",
+        dest="date_to",
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="Q2: inclusive range end (ISO business date)",
+    )
     p_query.set_defaults(func=cmd_query)
+
+    p_dataset = sub.add_parser("dataset", help="Q1 dataset/partition selection and yearly summaries")
+    add_common(p_dataset, state=True)
+    p_dataset.add_argument("--family", default=None, help="restrict to one format family (exact, as-published)")
+    p_dataset.add_argument("--year", type=int, default=None, help="restrict to one calendar-year partition")
+    p_dataset.set_defaults(func=cmd_dataset)
 
     p_rebuild = sub.add_parser("rebuild", help="delete and rebuild class-(4) state (op b)")
     add_common(p_rebuild, state=True)

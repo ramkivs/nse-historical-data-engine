@@ -10,9 +10,10 @@ Two distinct kinds of evidence, kept strictly separate (D24 record §13):
 
 2. *Real-package integration* (executed only when the environment provides the
    qualified M2 package via ``D24_M2_ROOT``): full verification with the pinned spec,
-   index build, Q3 query, rebuild. When the environment does not provide the
-   package, this test is SKIPPED and reported as such — it is never represented as
-   passed, and the fixture tests never stand in for it.
+   index build, Q1 dataset summaries, Q2 date-range query, Q3 query, rebuild.
+   When the environment does not provide the package, this test is SKIPPED and
+   reported as such — it is never represented as passed, and the fixture tests
+   never stand in for it.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ import unittest
 from tests import support
 from serving.baseline import DEFAULT_M2_SPEC, BaselineError, open_baseline
 from serving.index import build_index, load_index, write_index
-from serving.query import query_instrument
+from serving.query import DATE_RANGE_QUERY_ID, query_date_range, query_dataset_summary, query_instrument
 from serving.rebuild import rebuild_state
 
 TRANSFER = "evidence/D11_REPLAY_QUALIFICATION_20261009/D11_E1_E10_TRANSFER_20261009.tar.gz"
@@ -118,6 +119,44 @@ class M2RealPackageIntegrationTests(unittest.TestCase):
         for row in rows:
             self.assertIn("provenance", row)
             self.assertNotIn("raw_line", row)
+
+    def test_q1_dataset_summary_over_real_baseline(self):
+        document, _digest = load_index(self.state, self.handle)
+        result = query_dataset_summary(document)
+        self.assertEqual(len(result["partitions"]), 12)
+        counts = document["counts"]
+        self.assertEqual(result["summary"]["row_files"], counts["row_files"])
+        self.assertEqual(result["summary"]["row_count"], counts["row_count"])
+        self.assertEqual(result["summary"]["instrument_pairs"], counts["instrument_pairs"])
+        selected = query_dataset_summary(document, family="legacy13", year=2024)
+        self.assertEqual([p["family"] for p in selected["partitions"]], ["legacy13"])
+        self.assertEqual(selected["summary"]["row_count"], selected["partitions"][0]["row_count"])
+        self.assertEqual(
+            query_dataset_summary(document, family="nosuchfamily"),
+            {
+                "query": "Q1-dataset",
+                "selection": {"family": "nosuchfamily", "year": None},
+                "partitions": [],
+                "summary": {"row_files": 0, "row_count": 0, "instrument_pairs": 0},
+            },
+        )
+
+    def test_q2_date_range_over_real_baseline(self):
+        # 2024-06-21..2024-07-05 is a range with known real rows (D26 evidence
+        # fragments: legacy13/2024 cmNN members, business dates within this span).
+        document, _digest = load_index(self.state, self.handle)
+        rows = query_date_range(self.handle, document, "2024-06-21", "2024-07-05")
+        self.assertGreater(len(rows), 0)
+        dates = [row["business_date"] for row in rows]
+        self.assertEqual(dates, sorted(dates))
+        for row in rows:
+            self.assertGreaterEqual(row["business_date"], "2024-06-21")
+            self.assertLessEqual(row["business_date"], "2024-07-05")
+            self.assertEqual(row["serving"]["query"], DATE_RANGE_QUERY_ID)
+            self.assertIn("provenance", row)
+            self.assertNotIn("raw_line", row)
+        # a range with no rows is empty, not an error
+        self.assertEqual(query_date_range(self.handle, document, "1990-01-01", "1990-01-02"), ())
 
     def test_rebuild_reproducibility(self):
         report = rebuild_state(self.handle, self.state)

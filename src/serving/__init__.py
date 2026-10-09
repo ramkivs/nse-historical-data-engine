@@ -9,8 +9,9 @@ Boundary (D16-09, D23 §§8/10/11/12):
 * the engine remains the owner of the write path;
 * serving state is durable class (4) — always a pure derivation of the baseline,
   rebuildable at any time; deleting it is never a data event (D16-07);
-* this slice implements exactly one query category: Q3 instrument query (D16-10),
-  with row-level D05 §8 provenance, over a deterministic, rebuildable read model.
+* this slice implements the Q1 dataset/partition summaries, the Q2 date-range
+  query, and the Q3 instrument query (D16-10), each with row-level D05 §8
+  provenance where rows are served, over a deterministic, rebuildable read model.
 
 Technology (D23 §13 delegated selection, recorded in the D24 implementation record):
 Python 3 standard library only; a plain canonical-JSON index file on local disk;
@@ -36,7 +37,16 @@ from .index import (
     load_index,
     write_index,
 )
-from .query import QUERY_ID, QueryError, partitions_listing, query_instrument
+from .query import (
+    DATE_RANGE_QUERY_ID,
+    DATASET_QUERY_ID,
+    QUERY_ID,
+    QueryError,
+    partitions_listing,
+    query_date_range,
+    query_dataset_summary,
+    query_instrument,
+)
 from .rebuild import rebuild_state
 
 __all__ = [
@@ -51,8 +61,12 @@ __all__ = [
     "load_index",
     "write_index",
     "QUERY_ID",
+    "DATASET_QUERY_ID",
+    "DATE_RANGE_QUERY_ID",
     "QueryError",
     "partitions_listing",
     "query_instrument",
+    "query_dataset_summary",
+    "query_date_range",
     "rebuild_state",
 ]
