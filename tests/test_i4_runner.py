@@ -16,6 +16,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -44,6 +45,32 @@ from tools.i4_runner import (  # noqa: E402
     i4_reconcile,
     i4_runner,
 )
+
+#: Retained-artifact leak detection, shared by `test_retained_package_is_clock_free_and_path_free`
+#: and `PathDetectionRegressionTests`.
+#:
+#: The Windows branch is searched **anywhere** in the text (G6 correction). The previous pattern
+#: anchored it to the start of the file (``^[A-Za-z]:\\\\``), so a Windows absolute path embedded
+#: mid-document — the realistic leak, e.g. inside a JSON value — was not detected. The branch now
+#: matches a drive-letter path in both the raw (``C:\IIPS_Data``) and the JSON-escaped
+#: (``"C:\\\\IIPS_Data"``) form, at any offset. The POSIX branch is unchanged (the declared root
+#: list); broadening it is out of scope for this correction.
+CLOCK_LIKE_RE = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}")
+ABSOLUTE_PATH_RE = re.compile(r"([A-Za-z]:\\|/(home|tmp|Users|mnt|var)/)")
+
+#: Retained-artifact keys that must never appear (RD-8: clock-free and path-free package).
+FORBIDDEN_KEY_PATTERNS = ("generated_at", "generated_utc", "hostname", "pid", "duration")
+
+
+def clock_like_hits(text):
+    """Absolute path / clock detection over a whole retained artifact body."""
+    return CLOCK_LIKE_RE.search(text)
+
+
+def absolute_path_hits(text):
+    """Return the match for a leaked absolute path anywhere in `text`, or None."""
+    return ABSOLUTE_PATH_RE.search(text)
+
 
 GOVERNED_INVENTORY = os.path.join(REPO_ROOT, "evidence", "inventory", "file_inventory.json")
 GOVERNED_INVENTORY_LF_SHA256 = (
@@ -956,21 +983,17 @@ class DeterminismTests(RunnerTestCase):
         self.assertEqual(first, second)
 
     def test_retained_package_is_clock_free_and_path_free(self):
-        import re
-
         corpus = self.make_corpus()
         out = self.out_dir()
         self.assertEqual(self.invoke(corpus.run_args(out)), i4_runner.EXIT_OK, self.last_stderr)
-        clock_like = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}")
-        absolute = re.compile(r"(^[A-Za-z]:\\\\|/(home|tmp|Users|mnt|var)/)")
         for dirpath, dirnames, filenames in os.walk(out):
             for name in filenames:
                 path = os.path.join(dirpath, name)
                 with open(path, "r", encoding="utf-8") as handle:
                     text = handle.read()
-                self.assertIsNone(clock_like.search(text), path)
-                self.assertIsNone(absolute.search(text), path)
-                for key in ("generated_at", "generated_utc", "hostname", "pid", "duration"):
+                self.assertIsNone(clock_like_hits(text), path)
+                self.assertIsNone(absolute_path_hits(text), path)
+                for key in FORBIDDEN_KEY_PATTERNS:
                     self.assertNotIn('"%s"' % key, text, path)
 
     def test_jsonl_artifacts_end_with_a_final_newline_and_use_lf(self):
@@ -982,6 +1005,64 @@ class DeterminismTests(RunnerTestCase):
                 body = handle.read()
             self.assertTrue(body.endswith(b"\n"), relative)
             self.assertNotIn(b"\r\n", body, relative)
+
+
+# ------------------------------------------------------------------ path detection (G6)
+
+#: A raw (unescaped) Windows absolute path, as a Windows text-mode writer would emit it.
+WINDOWS_PATH_RAW = "C:\\IIPS_Data\\nse-historical-data-engine\\src\\nse_engine"
+#: The same path inside a JSON document on the wire (each backslash escaped): the form a leaked
+#: path realistically takes in a retained `.jsonl`/`.json` artifact.
+WINDOWS_PATH_ESCAPED = '{"note":"evidence","out_root":"G:\\\\My Engines\\\\I4_RUNS\\\\i4-20261008-M2"}'
+FILLER = '{"a":1,"b":"text","c":[1,2,3]}\n'
+
+
+class PathDetectionRegressionTests(unittest.TestCase):
+    """G6 — the retained-artifact scan must detect a Windows path anywhere in a file.
+
+    The scan is the only defence against a host path leaking into a retained artifact, so the
+    detector is pinned here: positive cases with the path at the beginning, in the middle and at
+    the end of the text (raw and JSON-escaped form), and path-free bodies that must not be
+    flagged. The previous anchored pattern missed every mid-file case.
+    """
+
+    def test_windows_path_is_detected_anywhere_in_the_text(self):
+        cases = {
+            "raw-at-beginning": WINDOWS_PATH_RAW + FILLER,
+            "raw-in-the-middle": FILLER[:12] + WINDOWS_PATH_RAW + FILLER,
+            "raw-at-the-end": FILLER + WINDOWS_PATH_RAW,
+            "escaped-at-beginning": WINDOWS_PATH_ESCAPED + FILLER,
+            "escaped-in-the-middle": FILLER[:12] + WINDOWS_PATH_ESCAPED + FILLER,
+            "escaped-at-the-end": FILLER + WINDOWS_PATH_ESCAPED,
+        }
+        for name, body in cases.items():
+            with self.subTest(case=name):
+                self.assertIsNotNone(absolute_path_hits(body), name)
+
+    def test_posix_path_branch_still_detects_the_declared_roots(self):
+        for root in ("home", "tmp", "Users", "mnt", "var"):
+            with self.subTest(root=root):
+                self.assertIsNotNone(absolute_path_hits("%s/x" % ("/" + root + "/")))
+
+    def test_valid_path_free_artifact_bodies_are_not_flagged(self):
+        bodies = {
+            "relative-jsonl-rows": '{"path":"partitions/legacy13/2024/rows/cm01JUL2024bhav.csv.rows.jsonl"}',
+            "relative-evidence": '{"member_name":"cm01JUL2024bhav.csv","partition":"legacy13_2024"}',
+            "sha256": '{"sha256":"d3269b731008a0d544eaa7e96d6c6b75cf94dfd6ce31d8fb5e1f23fdf10a80e9"}',
+            "date-only-value": '{"date_from_filename":"2024-07-01","rows":3}',
+            "url-in-note": '{"note":"see https://example.com/data/2024 for the published form"}',
+            "windows-relative-path": '{"relative_path":"runs\\\\i4-20261008\\\\payload"}',
+            "storage-boundary-note": '{"storage_technology":"UNDECIDED (MD-12; not selected, not implied, by this run)"}',
+            "series-counts": '{"series_counts":{"EQ":2,"BE":1},"date_values":{"2024-07-01":3}}',
+        }
+        for name, body in bodies.items():
+            with self.subTest(case=name):
+                self.assertIsNone(absolute_path_hits(body), name)
+
+    def test_clock_branch_is_unchanged(self):
+        self.assertIsNotNone(clock_like_hits('{"at":"2026-10-08T10:00:00"}'))
+        self.assertIsNotNone(clock_like_hits('{"at":"2026-10-08 10:00"}'))
+        self.assertIsNone(clock_like_hits('{"date_from_filename":"2026-10-08"}'))
 
 
 # ------------------------------------------------------------------ run_id behaviour
