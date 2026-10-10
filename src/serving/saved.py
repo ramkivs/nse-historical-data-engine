@@ -491,26 +491,21 @@ def delete_saved(root: str, query_id: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def execute_saved(root: str, query_id: str, baseline: Baseline, state_root: str, m2: bool = False) -> dict:
-    """Load a saved definition and execute it through the existing query layer.
+def execute_query_definition(
+    mode: str, params: dict, baseline: Baseline, state_root: str, m2: bool = False
+) -> dict:
+    """Execute one supported Q1–Q10 query contract by its query-id mode name,
+    with an exact (already validated) params dict.
 
-    The result envelope is exactly the one the corresponding CLI query/view
-    command produces for the same parameters (no new query semantics — D23
-    §18(8)). The call is read-only against the store: it never writes the store
-    (C2(a)), and a query failure never affects it or the baseline (D16-09).
-
-    ``state_root`` is the derived-state directory (required for every mode; the
-    index is loaded even by the two modes that do not consume it, mirroring the
-    established verify → build → query flow). ``m2`` pins the D01 inventory for
-    the Q9 view exactly as the CLI does.
+    Single implementation of the per-mode execution and result envelope, shared
+    by the saved-query load-and-execute path and the explicit history-recording
+    operation. The result envelope is exactly the one the corresponding CLI
+    query/view command produces for the same parameters (no new query semantics —
+    D23 §18(8)). ``state_root`` is the derived-state directory (required for
+    every mode; the index is loaded even by the two modes that do not consume it,
+    mirroring the established verify → build → query flow). ``m2`` pins the D01
+    inventory for the Q9 view exactly as the CLI does.
     """
-    assert_separate_roots(root, state_root)
-    document = load_saved(root)
-    record = document["queries"].get(query_id)
-    if record is None:
-        raise SavedQueryError("saved-query-not-found", "no saved query with identifier %r to run" % query_id)
-    mode = record["mode"]
-    params = record["params"]
     index_document, _digest = load_index(state_root, baseline)
     if mode == DATASET_MODE:
         return query_dataset_summary(index_document, family=params.get("family"), year=params.get("year"))
@@ -579,3 +574,19 @@ def execute_saved(root: str, query_id: str, baseline: Baseline, state_root: str,
         "saved-query-invalid",
         "no execution path for query mode %r (supported: %s)" % (mode, ", ".join(sorted(SAVED_MODES))),
     )
+
+
+def execute_saved(root: str, query_id: str, baseline: Baseline, state_root: str, m2: bool = False) -> dict:
+    """Load a saved definition and execute it through the existing query layer.
+
+    The result envelope is exactly the one the corresponding CLI query/view
+    command produces for the same parameters (no new query semantics — D23
+    §18(8)). The call is read-only against the store: it never writes the store
+    (C2(a)), and a query failure never affects it or the baseline (D16-09).
+    """
+    assert_separate_roots(root, state_root)
+    document = load_saved(root)
+    record = document["queries"].get(query_id)
+    if record is None:
+        raise SavedQueryError("saved-query-not-found", "no saved query with identifier %r to run" % query_id)
+    return execute_query_definition(record["mode"], record["params"], baseline, state_root, m2=m2)

@@ -428,6 +428,43 @@ class M2RealPackageIntegrationTests(unittest.TestCase):
         finally:
             shutil.rmtree(saved_root, ignore_errors=True)
 
+    def test_history_record_over_real_baseline(self):
+        """D37-DEC C2(a) over the real qualified baseline: the explicit
+        recording operation records a real execution's outcome, and ordinary
+        query execution leaves the history store untouched."""
+        import hashlib
+        import shutil
+
+        from serving.history import HISTORY_FILENAME, list_history, record_execution
+
+        hist_root = tempfile.mkdtemp(prefix="d39-m2-history-")
+        try:
+            entry, output, detail, digest = record_execution(
+                hist_root, "Q2-date-range", {"date_from": "2024-06-21", "date_to": "2024-07-05"},
+                self.handle, self.state,
+            )
+            self.assertEqual(entry["outcome"], "success")
+            self.assertEqual(entry["seq"], 1)
+            self.assertIsNone(detail)
+            self.assertGreater(output["result_count"], 0)
+            (stored,) = list_history(hist_root)
+            self.assertEqual(stored, entry)
+            with open(os.path.join(hist_root, HISTORY_FILENAME), "rb") as handle:
+                self.assertEqual(hashlib.sha256(handle.read()).hexdigest(), digest)
+            # ordinary query execution must not write history (C2(a))
+            before = sorted(
+                (name, hashlib.sha256(open(os.path.join(hist_root, name), "rb").read()).hexdigest())
+                for name in os.listdir(hist_root) if os.path.isfile(os.path.join(hist_root, name))
+            )
+            query_date_range(self.handle, self.index, "2024-06-21", "2024-07-05")
+            after = sorted(
+                (name, hashlib.sha256(open(os.path.join(hist_root, name), "rb").read()).hexdigest())
+                for name in os.listdir(hist_root) if os.path.isfile(os.path.join(hist_root, name))
+            )
+            self.assertEqual(after, before)
+        finally:
+            shutil.rmtree(hist_root, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

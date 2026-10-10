@@ -13,6 +13,10 @@ Boundary (D16-09, D23 §§8/10/11/12):
   outside the derived-state rebuild scope: rebuilding derived state never touches
   them, deletion is an explicit user-visible operation, and executing a saved query
   never mutates the store (D37-DEC C1(a)/C2(a));
+* query history is class-(4) serving-owned user state in its own distinct store
+  root, recorded ONLY through the explicit `history record` operation (which
+  executes the given mode + parameters and records the actual outcome); ordinary
+  query and saved-run execution never write history (D37-DEC C2(a));
 * this slice implements the Q1 dataset/partition summaries, the Q2 date-range
   query, the Q3 instrument query (D16-10), the Q4 exact-value filter query
   (series / segment / source / instrument_type as-published values only),
@@ -103,6 +107,18 @@ from .query import (
     query_instrument,
 )
 from .rebuild import rebuild_state
+from .history import (
+    HISTORY_DIGEST_FILENAME,
+    HISTORY_FILENAME,
+    HISTORY_FORMAT,
+    HistoryError,
+    delete_history,
+    get_history,
+    list_history,
+    load_history,
+    record_execution,
+    save_history_document,
+)
 from .saved import (
     SAVED_DIGEST_FILENAME,
     SAVED_FILENAME,
@@ -179,4 +195,14 @@ __all__ = [
     "update_saved",
     "delete_saved",
     "execute_saved",
+    "HISTORY_FILENAME",
+    "HISTORY_DIGEST_FILENAME",
+    "HISTORY_FORMAT",
+    "HistoryError",
+    "load_history",
+    "save_history_document",
+    "record_execution",
+    "list_history",
+    "get_history",
+    "delete_history",
 ]

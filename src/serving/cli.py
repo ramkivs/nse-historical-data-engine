@@ -32,10 +32,16 @@ Commands:
             save / show / list / update / delete, and `saved run` (loads a saved
             definition and execute it through the existing query modes; a run
             never mutates the store — C2(a))
+  history   query history — recorded ONLY through the explicit `history record`
+            operation (executes the given mode + parameters and records the
+            actual outcome; C2(a)). Ordinary query / saved-run execution never
+            writes history. list / show / delete manage the entries (a DISTINCT
+            root outside the derived-state rebuild scope)
 
-Exit codes: 0 = ok; 2 = usage/verification/query failure (fail closed); 3 =
-index/stale/saved-store state failure. No partial results are printed on
-failure.
+Exit codes: 0 = ok (for `history record`: the entry is durably recorded — a
+recorded query failure is data in the entry, not an operation failure);
+2 = usage/verification/query failure (fail closed); 3 = index/stale/saved-store
+state failure. No partial results are printed on failure.
 """
 
 from __future__ import annotations
@@ -65,6 +71,13 @@ from .query import (
     query_dataset_summary,
     query_filters,
     query_instrument,
+)
+from .history import (
+    HistoryError,
+    delete_history,
+    get_history,
+    list_history,
+    record_execution,
 )
 from .rebuild import rebuild_state
 from .saved import (
@@ -399,6 +412,86 @@ def cmd_saved_run(args) -> int:
     return 0
 
 
+def _history_exit_code(exc: HistoryError) -> int:
+    """3 for store-state failures; 2 for usage-level failures (not-found)."""
+    state_checks = (
+        "history-missing",
+        "history-corrupt",
+        "history-format",
+        "history-schema",
+        "history-state-conflict",
+    )
+    return 3 if exc.check in state_checks else 2
+
+
+def cmd_history_record(args) -> int:
+    """The single explicit history-recording operation (C2(a)).
+
+    Exit 0 = the entry is durably recorded (``outcome`` in the output says
+    whether the explicitly requested execution succeeded or failed). Exit 2/3
+    = the operation itself failed (invalid description, store-state failure,
+    baseline/state failure) — in that case NO entry is published.
+    """
+    try:
+        params = validate_saved_definition(args.mode, _saved_param_flags(args))
+    except SavedQueryError as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return 2
+    try:
+        handle = _open(args)
+        entry, output, detail, digest = record_execution(
+            args.history_state, args.mode, params, handle, args.state, m2=args.m2
+        )
+    except HistoryError as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return _history_exit_code(exc)
+    except (baseline_mod.BaselineError, ServingIndexError, D01InventoryError) as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return 3
+    result = {
+        "result": "recorded",
+        "outcome": entry["outcome"],
+        "entry": entry,
+        "store_sha256": digest,
+    }
+    if entry["outcome"] == "success":
+        result["query"] = output
+    else:
+        result["detail"] = detail
+    _print_json(result)
+    return 0
+
+
+def cmd_history_list(args) -> int:
+    try:
+        entries = list_history(args.history_state)
+    except HistoryError as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return _history_exit_code(exc)
+    _print_json({"result": "pass", "count": len(entries), "entries": entries})
+    return 0
+
+
+def cmd_history_show(args) -> int:
+    try:
+        entry = get_history(args.history_state, args.seq)
+    except HistoryError as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return _history_exit_code(exc)
+    _print_json({"result": "pass", "entry": entry})
+    return 0
+
+
+def cmd_history_delete(args) -> int:
+    try:
+        digest = delete_history(args.history_state, args.seq)
+    except HistoryError as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return _history_exit_code(exc)
+    _print_json({"result": "pass", "seq": args.seq, "store_sha256": digest})
+    return 0
+
+
 def cmd_dataset(args) -> int:
     try:
         handle = _open(args)
@@ -682,6 +775,41 @@ def build_parser() -> argparse.ArgumentParser:
     p_saved_run.add_argument("--id", dest="id", required=True, help="saved-query identifier")
     add_common(p_saved_run, state=True)
     p_saved_run.set_defaults(func=cmd_saved_run)
+
+    p_history = sub.add_parser(
+        "history",
+        help="query history (recorded ONLY via the explicit `history record` operation, "
+        "C2(a); distinct root outside the derived-state rebuild scope)",
+    )
+    history_sub = p_history.add_subparsers(dest="history_command", required=True)
+
+    p_history_record = history_sub.add_parser(
+        "record",
+        help="explicitly execute a mode + parameters and record the actual outcome "
+        "(the ONLY path that writes history)",
+    )
+    p_history_record.add_argument(
+        "--history-state",
+        required=True,
+        help="query-history store dir (a DISTINCT dir from the derived --state dir; OUTSIDE the package)",
+    )
+    add_saved_def_flags(p_history_record)
+    add_common(p_history_record, state=True)
+    p_history_record.set_defaults(func=cmd_history_record)
+
+    p_history_list = history_sub.add_parser("list", help="list history entries (ascending seq)")
+    p_history_list.add_argument("--history-state", required=True, help="query-history store dir")
+    p_history_list.set_defaults(func=cmd_history_list)
+
+    p_history_show = history_sub.add_parser("show", help="read one history entry by seq")
+    p_history_show.add_argument("--history-state", required=True, help="query-history store dir")
+    p_history_show.add_argument("--seq", type=int, required=True, help="the entry's stable seq")
+    p_history_show.set_defaults(func=cmd_history_show)
+
+    p_history_delete = history_sub.add_parser("delete", help="explicitly delete one history entry by seq")
+    p_history_delete.add_argument("--history-state", required=True, help="query-history store dir")
+    p_history_delete.add_argument("--seq", type=int, required=True, help="the entry's stable seq")
+    p_history_delete.set_defaults(func=cmd_history_delete)
 
     p_dataset = sub.add_parser("dataset", help="Q1 dataset/partition selection and yearly summaries")
     add_common(p_dataset, state=True)
