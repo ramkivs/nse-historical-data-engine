@@ -10,7 +10,9 @@ Boundary (D16-09, D23 §§8/10/11/12):
 * serving state is durable class (4) — always a pure derivation of the baseline,
   rebuildable at any time; deleting it is never a data event (D16-07);
 * this slice implements the Q1 dataset/partition summaries, the Q2 date-range
-  query, the Q3 instrument query (D16-10), the Q9 archive inventory query
+  query, the Q3 instrument query (D16-10), the Q4 exact-value filter query
+  (series / segment / source / instrument_type as-published values only),
+  the Q9 archive inventory query
   (per-archive INPUT_MANIFEST + D01 facts with the explicit M2-only registry
   absence), the Q7 record-detail query (one canonical row plus its archive
   and reconciliation facts), the Q8 data-quality views (flag censuses,
@@ -77,6 +79,7 @@ from .query import (
     partitions_listing,
     query_date_range,
     query_dataset_summary,
+    query_filters,
     query_instrument,
 )
 from .rebuild import rebuild_state
@@ -116,5 +119,6 @@ __all__ = [
     "query_instrument",
     "query_dataset_summary",
     "query_date_range",
+    "query_filters",
     "rebuild_state",
 ]

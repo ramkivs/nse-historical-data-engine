@@ -36,6 +36,18 @@ from .index import ServingIndexError
 QUERY_ID = "Q3-instrument"
 DATASET_QUERY_ID = "Q1-dataset"
 DATE_RANGE_QUERY_ID = "Q2-date-range"
+FILTER_QUERY_ID = "Q4-filter"
+
+#: Q4's filterable fields, pinned by the D05 §3.1 field table (as-published
+#: values only; D05 NON-ASSUMPTION: descriptive attributes are never used for
+#: inferred type semantics — exact stored-value equality only):
+#: * ``series`` — present in both format families (D05 §3.1 "string, always");
+#: * ``segment`` (``Sgmt``), ``source`` (``Src``), ``instrument_type``
+#:   (``FinInstrmTp``) — UDiFF-only descriptive attributes; on legacy rows the
+#:   values are absent (``None``) and can never match any requested value.
+#: No other field is a Q4 filter: a requested name outside this tuple fails
+#: closed (no undocumented aliases, no synonyms).
+Q4_FILTER_FIELDS = ("series", "segment", "source", "instrument_type")
 
 _ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -192,6 +204,91 @@ def query_date_range(
                     "query": DATE_RANGE_QUERY_ID,
                     "date_from": date_from,
                     "date_to": date_to,
+                    "source_file": relative,
+                    "source_file_family": meta.get("family"),
+                    "source_file_year": meta.get("year"),
+                }
+                results.append(served)
+    results.sort(
+        key=lambda row: (
+            row.get("business_date") or "",
+            row.get("format_family") or "",
+            row["serving"]["source_file_year"] or "",
+            row["serving"]["source_file"],
+            row.get("source_line_number") or 0,
+        )
+    )
+    return tuple(results)
+
+
+def query_filters(
+    baseline: Baseline,
+    index: dict,
+    filters: dict,
+) -> Tuple[dict, ...]:
+    """Q4 segment / market-type / series / trading-status filtering
+    (D16-10 Q4: "as-published field values").
+
+    ``filters`` maps one or more of :data:`Q4_FILTER_FIELDS` to the exact
+    as-published value to match. Semantics, per the governing contract
+    (D16-10 Q4; D05 §3.1; D22 §5 E1; D23 §10):
+
+    * **exact-value equality only** — no normalisation, translation, case or
+      whitespace folding, and no expression language; the requested value must
+      be a string (the empty string matches exactly-blank stored values);
+    * **absent never matches** — a row whose field value is absent (``None``,
+      the legacy family for the UDiFF-only fields) can never match any
+      requested value, including the empty string;
+    * **AND semantics** — a row is served only when every requested field
+      matches exactly (the single contract-supported composition);
+    * **format-family handling** — ``series`` is checked on every row of both
+      families; ``segment``/``source``/``instrument_type`` match only where
+      the family stores them (UDiff), by the same absent-never-matches rule.
+
+    There is no per-field index census, so every row file is a candidate and
+    each row is re-checked against its exact as-published values (the index
+    supplies the file set only — no index extension is required, and the
+    deterministic rebuild/stale-index behavior is untouched). Malformed
+    requests (non-dict, empty, unknown field, non-string value) fail closed
+    with :class:`QueryError` before any row is served. Results carry the
+    canonical row exactly as stored (``raw_line`` never served) plus the Q4
+    serving envelope; ordering is the established deterministic 5-tuple
+    shared with Q2/Q3. Read-only: files are streamed, nothing is written.
+    """
+    if not isinstance(filters, dict):
+        raise QueryError("query-input", "filters must be a mapping of Q4 field -> exact value")
+    if not filters:
+        raise QueryError("query-input", "Q4 requires at least one filter (an unfiltered scan is not a Q4 request)")
+    for field in filters:
+        if field not in Q4_FILTER_FIELDS:
+            raise QueryError(
+                "query-input",
+                "unknown Q4 filter field %r (supported: %s)" % (field, ", ".join(Q4_FILTER_FIELDS)),
+            )
+    for field, value in filters.items():
+        if not isinstance(value, str):
+            raise QueryError("query-input", "Q4 filter value for %r must be a string (as-published value), got %r" % (field, value))
+
+    results = []
+    for relative in sorted(index.get("files", {})):
+        meta = index["files"][relative]
+        with open(baseline.path(relative), "r", encoding="utf-8") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                try:
+                    obj = json.loads(line)
+                except ValueError as exc:
+                    raise QueryError("query-scan", "unparseable canonical row in %s: %s" % (relative, exc))
+                values = obj.get("source_values")
+                if not isinstance(values, dict):
+                    raise QueryError("query-scan", "canonical row without contract keys in %s" % relative)
+                if any(values.get(field) != value for field, value in filters.items()):
+                    continue
+                served = {key: value for key, value in obj.items() if key != "raw_line"}
+                served["serving"] = {
+                    "query": FILTER_QUERY_ID,
+                    "filters": dict(filters),
                     "source_file": relative,
                     "source_file_family": meta.get("family"),
                     "source_file_year": meta.get("year"),

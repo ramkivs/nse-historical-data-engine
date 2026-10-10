@@ -11,7 +11,8 @@ Commands:
   verify    verify a package against its manifests (and, with --m2, the pinned M2 pin)
   build     build the class-(4) index from the verified baseline into --state
   query     run the Q3 instrument query (symbol series), the Q2 date-range
-            query (--from --to), or the Q7 record-detail query
+            query (--from --to), the Q4 exact-value filter query
+            (--field NAME=VALUE, repeatable), or the Q7 record-detail query
             (--file --line); exactly one mode per invocation
   dataset   run the Q1 dataset/partition selection and yearly summaries
   quality   run the Q8 data-quality view (flag census, quarantine count,
@@ -41,10 +42,12 @@ from .qualification import query_qualification
 from .quality import query_data_quality
 from .query import (
     DATE_RANGE_QUERY_ID,
+    FILTER_QUERY_ID,
     QUERY_ID,
     QueryError,
     query_date_range,
     query_dataset_summary,
+    query_filters,
     query_instrument,
 )
 from .rebuild import rebuild_state
@@ -105,15 +108,29 @@ def cmd_query(args) -> int:
     q2 = args.date_from is not None or args.date_to is not None
     q3 = args.symbol is not None or args.series is not None
     q7 = args.source_file is not None or args.source_line_number is not None
-    if sum(bool(mode) for mode in (q2, q3, q7)) != 1:
+    q4 = bool(args.field)
+    if sum(bool(mode) for mode in (q2, q3, q7, q4)) != 1:
         _print_json(
             {
                 "result": "fail",
                 "detail": "query requires exactly one of: symbol series (Q3), --from and --to (Q2), "
-                "or --file and --line (Q7)",
+                "--field NAME=VALUE (Q4), or --file and --line (Q7)",
             }
         )
         return 2
+    if q4:
+        filters = {}
+        for item in args.field:
+            name, sep, value = item.partition("=")
+            if not sep or not name:
+                _print_json({"result": "fail", "detail": "Q4 --field requires NAME=VALUE, got %r" % item})
+                return 2
+            if name in filters:
+                _print_json(
+                    {"result": "fail", "detail": "Q4 allows exactly one value per field; duplicate filter for %r" % name}
+                )
+                return 2
+            filters[name] = value
     if q7 and (args.source_file is None or args.source_line_number is None):
         _print_json({"result": "fail", "detail": "Q7 record detail requires both --file and --line"})
         return 2
@@ -132,6 +149,14 @@ def cmd_query(args) -> int:
                 "query": DATE_RANGE_QUERY_ID,
                 "date_from": args.date_from,
                 "date_to": args.date_to,
+                "result_count": len(rows),
+                "rows": list(rows),
+            }
+        elif q4:
+            rows = query_filters(handle, document, filters)
+            output = {
+                "query": FILTER_QUERY_ID,
+                "filters": filters,
                 "result_count": len(rows),
                 "rows": list(rows),
             }
@@ -236,11 +261,22 @@ def build_parser() -> argparse.ArgumentParser:
     add_common(p_build, state=True)
     p_build.set_defaults(func=cmd_build)
 
-    p_query = sub.add_parser("query", help="run the Q3 instrument query or the Q2 date-range query")
+    p_query = sub.add_parser(
+        "query",
+        help="run the Q3 instrument query, the Q2 date-range query, the Q4 exact-value filter query, or the Q7 record detail",
+    )
     add_common(p_query, state=True)
     p_query.add_argument("symbol", nargs="?", default=None)
     p_query.add_argument("series", nargs="?", default=None)
     p_query.add_argument("--year", type=int, default=None)
+    p_query.add_argument(
+        "--field",
+        dest="field",
+        action="append",
+        default=None,
+        metavar="NAME=VALUE",
+        help="Q4: exact-value filter on one of series/segment/source/instrument_type (repeatable; AND semantics)",
+    )
     p_query.add_argument(
         "--from",
         dest="date_from",

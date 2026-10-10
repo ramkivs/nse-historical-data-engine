@@ -30,6 +30,7 @@ from serving.baseline import DEFAULT_M2_SPEC, BaselineError, open_baseline
 from serving.detail import query_record_detail
 from serving.qualification import query_qualification
 from serving.quality import query_data_quality
+from serving.query import query_filters
 from serving.index import build_index, load_index, write_index
 from serving.query import DATE_RANGE_QUERY_ID, query_date_range, query_dataset_summary, query_instrument
 from serving.rebuild import rebuild_state
@@ -279,6 +280,30 @@ class M2RealPackageIntegrationTests(unittest.TestCase):
                 self.assertEqual(evidence[key]["association"], "absent")
         again = query_qualification(self.handle, repo_root=repo_root)
         self.assertEqual(json.dumps(again, sort_keys=True), json.dumps(result, sort_keys=True))
+
+    def test_q4_filters_over_real_baseline(self):
+        # Q4 over the actual qualified M2 baseline: exact-value semantics
+        # (every served row carries exactly the requested value), AND
+        # semantics, absent-never-matches (legacy rows for UDiFF-only
+        # fields), and determinism. No counts are asserted beyond the
+        # corpus-proven facts (D05: Sgmt=CM/Src=NSE on UDiff rows).
+        document, _digest = load_index(self.state, self.handle)
+        cm = query_filters(self.handle, document, {"segment": "CM"})
+        for row in cm:
+            self.assertEqual(row["source_values"]["segment"], "CM")
+            self.assertEqual(row["format_family"], "udiff34")
+        nse = query_filters(self.handle, document, {"source": "NSE"})
+        for row in nse:
+            self.assertEqual(row["source_values"]["source"], "NSE")
+            self.assertEqual(row["format_family"], "udiff34")
+        # AND semantics: every combined row matches both requested values
+        combined = query_filters(self.handle, document, {"segment": "CM", "source": "NSE"})
+        for row in combined:
+            self.assertEqual(row["source_values"]["segment"], "CM")
+            self.assertEqual(row["source_values"]["source"], "NSE")
+        self.assertEqual(query_filters(self.handle, document, {"segment": "__NONE__"}), ())
+        again = query_filters(self.handle, document, {"segment": "CM"})
+        self.assertEqual(json.dumps(again, sort_keys=True), json.dumps(cm, sort_keys=True))
 
 
 if __name__ == "__main__":
