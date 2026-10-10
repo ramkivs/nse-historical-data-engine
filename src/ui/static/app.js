@@ -247,6 +247,8 @@ const S = {
   dash: {
     loaded: false, loading: false, error: null,
     q1: null, q6: null, q8: null, q9: null, q10: null,
+    q1Error: null, q6Error: null, q8Error: null, q9Error: null, q10Error: null,
+    errors: [],          /* per-query failures: [{name, check, message}] */
     archiveSelection: -1,
     archiveSearch: "", archiveSegment: "", archiveYear: "",
     sortKey: "sequence", sortDir: 1,
@@ -258,7 +260,7 @@ const S = {
     results: { doc: null, rows: [], meta: null, page: 0, perPage: 25, selected: -1, banner: null },
     inspector: { loading: false, error: null, detail: null, related: null, relatedError: null },
     quality: { loaded: false, loading: false, error: null, doc: null },
-    saved: { loaded: false, loading: false, error: null, entries: [] },
+    saved: { loaded: false, loading: false, error: null, entries: [], selected: null },
     history: { loaded: false, loading: false, error: null, entries: [], detail: null },
     q1Cache: null,        /* dataset summary used by "Latest N years" presets */
   },
@@ -415,43 +417,72 @@ function updateStatusBar() {
 
 /* ============================ dashboard ============================ */
 
+/* Error containment contract (TASK65 / D23 §17(b)): each dashboard query is
+   contained independently — a failing query surfaces its error in the
+   region(s) that depend on it while the other regions render from their own
+   successful responses. Nothing is fabricated: a value whose source failed
+   renders as unavailable/error, never as zero, success, or an empty result. */
 async function loadDashboard() {
   const d = S.dash;
   if (d.loaded || d.loading) return;
   d.loading = true;
-  $("dash-rows-year").innerHTML = stateHtml("loading", "Loading…");
-  $("dash-segments").innerHTML = stateHtml("loading", "Loading…");
-  $("dash-coverage").innerHTML = stateHtml("loading", "Loading…");
-  $("dash-archives").innerHTML = stateHtml("loading", "Loading…");
+  d.q1Error = d.q6Error = d.q8Error = d.q9Error = d.q10Error = null;
+  d.errors = [];
+  for (const id of ["dash-rows-year", "dash-segments", "dash-coverage", "dash-archives"]) {
+    $(id).innerHTML = stateHtml("loading", "Loading…");
+  }
+  const names = ["q1", "q6", "q8", "q9", "q10"];
   try {
     const server = S.server || (S.server = await api.status());
     const q10Params = server.repo_root ? { repo: server.repo_root } : {};
-    const [q1, q6, q8, q9, q10] = await Promise.all([
+    const results = await Promise.allSettled([
       api.query(MODE.Q1, {}),
       api.query(MODE.Q6, {}),
       api.query(MODE.Q8, {}),
       api.query(MODE.Q9, {}),
       api.query(MODE.Q10, q10Params),
     ]);
-    d.q1 = q1.query; d.q6 = q6.query; d.q8 = q8.query; d.q9 = q9.query; d.q10 = q10.query;
-    d.loaded = true;
-    renderDashboard();
+    results.forEach((r, i) => {
+      if (r.status === "fulfilled") d[names[i]] = r.value.query;
+      if (r.status === "rejected") {
+        d[names[i] + "Error"] = r.reason;
+        d.errors.push({ name: names[i], check: r.reason && r.reason.check, message: r.reason && r.reason.message });
+      }
+    });
   } catch (err) {
-    d.error = err;
-    for (const id of ["dash-rows-year", "dash-segments", "dash-coverage", "dash-archives"]) {
-      setError($(id), err);
-    }
-    $("dash-run").innerHTML = stateHtml("error", { check: err.check || "", detail: err.message });
-  } finally {
-    d.loading = false;
-    updateStatusBar();
+    /* the /api/status call itself failed: the adapter is unreachable, so every
+       query is failed together — no region may render */
+    d.q1Error = d.q6Error = d.q8Error = d.q9Error = d.q10Error = err;
+    d.errors = names.map((n) => ({ name: n, check: err.check, message: err.message }));
   }
+  d.error = d.errors.length ? d.errors[0] : null;
+  d.loading = false;
+  d.loaded = d.errors.length === 0;  /* a failed load stays retryable */
+  renderDashboard();
+  updateStatusBar();
+}
+
+function errText(err) {
+  return (err && err.check ? err.check + " — " : "") + (err && err.message ? err.message : "");
+}
+
+function dashFailureHtml(errors, withModes) {
+  if (!errors.length) return "";
+  const lines = errors.map((e) =>
+    '<div class="state-error"><span class="check">' + esc((withModes && e.name ? e.name.toUpperCase() + " · " : "") + (e.check || "")) + "</span> — " + esc(e.message || "") + "</div>"
+  );
+  return '<div class="dash-failures">' + lines.join("") + "</div>";
 }
 
 function renderRunSummary() {
   const el = $("dash-run");
-  const q10 = S.dash.q10;
-  if (!q10) { el.innerHTML = ""; return; }
+  const d = S.dash;
+  const q10 = d.q10;
+  if (!q10) {
+    el.innerHTML = (d.q10Error ? stateHtml("error", { check: d.q10Error.check || "", detail: d.q10Error.message }) : "") +
+      dashFailureHtml(d.errors, true);
+    return;
+  }
   const pkg = q10.package || {};
   const runId = (pkg.run_identity || {}).run_id || "unavailable";
   const engine = pkg.engine_identity || {};
@@ -462,28 +493,47 @@ function renderRunSummary() {
     kvRow("Run date/time", null) +
     kvRow("Engine", engine.tool_name ? engine.tool_name + " " + (engine.tool_version || "") : null) +
     kvRow("Corpus", corpus.archive_count !== undefined ? fmtInt(corpus.archive_count) + " archives" : null) +
-    kvRow("Package files", manifests.file_count !== undefined ? fmtInt(manifests.file_count) + " (" + fmtBytes(manifests.total_bytes || 0) + ")" : null);
+    kvRow("Package files", manifests.file_count !== undefined ? fmtInt(manifests.file_count) + " (" + fmtBytes(manifests.total_bytes || 0) + ")" : null) +
+    dashFailureHtml(d.errors, true);
 }
 
 function renderKpis() {
   const d = S.dash;
   const cards = [];
   const q9 = d.q9, q1 = d.q1, q6 = d.q6, q8 = d.q8;
+  /* a card whose source query failed renders as explicitly unavailable with
+     the failure named — never a zero value, never a success glyph */
   if (q9 && q9.summary && q9.summary.archive_count !== undefined) {
     const d01ok = q9.summary.d01_inventory && q9.summary.d01_inventory.present;
     cards.push({ label: "Archives Processed", value: fmtInt(q9.summary.archive_count), glyph: d01ok ? "ok" : "muted", detail: d01ok ? "D01 join verified (Q9)" : "D01 inventory absent (non-pinned baseline)" });
+  } else if (d.q9Error) {
+    cards.push({ label: "Archives Processed", value: null, glyph: "muted", detail: "unavailable — Q9 failed: " + errText(d.q9Error) });
+  } else {
+    cards.push({ label: "Archives Processed", value: null, glyph: "muted", detail: "unavailable" });
   }
   if (q1 && q1.summary) {
     cards.push({ label: "Canonical Rows", value: fmtInt(q1.summary.row_count), glyph: "muted", detail: q1.partitions.length + " partitions · " + fmtInt(q1.summary.instrument_pairs) + " instrument pairs" });
+  } else if (d.q1Error) {
+    cards.push({ label: "Canonical Rows", value: null, glyph: "muted", detail: "unavailable — Q1 failed: " + errText(d.q1Error) });
+  } else {
+    cards.push({ label: "Canonical Rows", value: null, glyph: "muted", detail: "unavailable" });
   }
   cards.push({ label: "Identity Records", value: null, glyph: "muted", detail: "No authorized count operation in the first release (Q5 is selector-scoped)" });
   if (q6) {
     if (q6.calendar_present) cards.push({ label: "Trading Calendars", value: fmtInt(q6.record_count), glyph: "muted", detail: "served calendar days (Q6)" });
     else cards.push({ label: "Trading Calendars", value: "absent", glyph: "muted", detail: "package carries no calendar (legitimate state)" });
+  } else if (d.q6Error) {
+    cards.push({ label: "Trading Calendars", value: null, glyph: "muted", detail: "unavailable — Q6 failed: " + errText(d.q6Error) });
+  } else {
+    cards.push({ label: "Trading Calendars", value: null, glyph: "muted", detail: "unavailable" });
   }
   if (q8) {
     const flagTotal = Object.values(q8.flag_census || {}).reduce((s, n) => s + n, 0);
     cards.push({ label: "Errors", value: fmtInt(flagTotal), glyph: flagTotal > 0 ? "warn" : "muted", detail: "row flags (Q8) · quarantined " + fmtInt((q8.quarantine || {}).count || 0) });
+  } else if (d.q8Error) {
+    cards.push({ label: "Errors", value: null, glyph: "muted", detail: "unavailable — Q8 failed: " + errText(d.q8Error) });
+  } else {
+    cards.push({ label: "Errors", value: null, glyph: "muted", detail: "unavailable" });
   }
   $("dash-kpis").innerHTML = cards.map((c) =>
     "<div class=\"kpi\"><span class=\"kpi-glyph glyph-" + c.glyph + "\" title=\"" + esc(c.detail) + "\"></span>" +
@@ -498,13 +548,20 @@ function renderDashboard() {
   renderRunSummary();
   renderKpis();
 
-  /* rows by year */
-  const byYear = rowsByYear(d.q1 ? d.q1.partitions : []);
-  $("dash-rows-year").innerHTML = byYear.length ? barChart(byYear) : stateHtml("empty", "No partitions served.");
+  /* rows by year (Q1) */
+  if (d.q1Error) {
+    setError($("dash-rows-year"), d.q1Error);
+  } else {
+    const byYear = rowsByYear(d.q1 ? d.q1.partitions : []);
+    $("dash-rows-year").innerHTML = byYear.length ? barChart(byYear) : stateHtml("empty", "No partitions served.");
+  }
 
-  /* segments */
-  const segs = segmentCounts(d.q9 ? d.q9.archives : []);
-  if (!segs.length) {
+  /* segments (Q9) */
+  if (d.q9Error) {
+    setError($("dash-segments"), d.q9Error);
+  } else {
+    const segs = segmentCounts(d.q9 ? d.q9.archives : []);
+    if (!segs.length) {
     $("dash-segments").innerHTML = stateHtml("unavailable", "Segment breakdown unavailable — no served D01 series_counts for this baseline.");
   } else {
     const total = segs.reduce((s, e) => s + e.row_count, 0);
@@ -512,7 +569,8 @@ function renderDashboard() {
       "<div class=\"row\"><span class=\"seg-dot\" style=\"background:" + SEGMENT_COLORS[i % SEGMENT_COLORS.length] + "\"></span>" +
       "<span>" + esc(e.segment) + "</span><span class=\"muted\">· " + fmtInt(e.archive_count) + " archive" + (e.archive_count === 1 ? "" : "s") + " · " + fmtInt(e.row_count) + " rows</span>" +
       "<span class=\"pct\">" + ((e.row_count / total) * 100).toFixed(1) + "%</span></div>"
-    ).join("") + "</div>";
+      ).join("") + "</div>";
+    }
   }
 
   /* coverage */
@@ -522,6 +580,12 @@ function renderDashboard() {
     d.q9 ? d.q9.archives : [],
     d.q1 ? d.q1.summary : null
   );
+  if (d.q9Error) cov.total_archives = null;  /* no zero substitute for a failed source */
+  const covFailures = [
+    d.q1Error ? { name: "q1", check: d.q1Error.check, message: d.q1Error.message } : null,
+    d.q6Error ? { name: "q6", check: d.q6Error.check, message: d.q6Error.message } : null,
+    d.q9Error ? { name: "q9", check: d.q9Error.check, message: d.q9Error.message } : null,
+  ].filter(Boolean);
   $("dash-coverage").innerHTML = "<div class=\"coverage-list\">" +
     kvRow("Start date", cov.start_date) +
     kvRow("End date", cov.end_date) +
@@ -530,7 +594,8 @@ function renderDashboard() {
     kvRow("Total rows", cov.total_rows) +
     kvRow("Instruments", cov.instruments) +
     kvRow("Exchange segments", cov.exchange_segments ? cov.exchange_segments.join(", ") : null) +
-    "</div>" + (cov.partition_years.length ? "<div class=\"muted\" style=\"font-size:10.5px;margin-top:6px\">partition years: " + cov.partition_years.join(", ") + "</div>" : "");
+    "</div>" + (cov.partition_years.length ? "<div class=\"muted\" style=\"font-size:10.5px;margin-top:6px\">partition years: " + cov.partition_years.join(", ") + "</div>" : "") +
+    dashFailureHtml(covFailures, true);
 
   renderArchives();
   renderArchiveDetail();
@@ -548,6 +613,11 @@ function archiveYearOf(rec) {
 
 function renderArchives() {
   const d = S.dash;
+  if (d.q9Error) {
+    $("archive-count").textContent = "unavailable";
+    setError($("dash-archives"), d.q9Error);
+    return;
+  }
   const archives = d.q9 ? d.q9.archives : [];
   /* filter + search + sort (display-level over served rows) */
   let rows = archives.slice();
@@ -1168,6 +1238,64 @@ function renderQuality() {
 
 /* ============================ explorer: saved & history ============================ */
 
+/* Load a saved definition into the Query Builder (D38 — the same definitions
+   the Saved Queries tab runs; no separate path, no new semantics). */
+async function loadSavedIntoBuilder(rec) {
+  switchTab("builder");
+  S.expl.builder.quick = null;
+  if (rec.mode === MODE.Q2) {
+    setBuilderMode(MODE.Q2);
+    $("q-date-from").value = rec.params.date_from || "";
+    $("q-date-to").value = rec.params.date_to || "";
+  } else if (rec.mode === MODE.Q3) {
+    setBuilderMode(MODE.Q3);
+    $("q-symbol").value = rec.params.symbol || "";
+    $("q-series").value = rec.params.series || "";
+    $("q-year").value = rec.params.year !== undefined ? rec.params.year : "";
+  } else if (rec.mode === MODE.Q4) {
+    setBuilderMode(MODE.Q4);
+    S.expl.builder.q4 = Object.entries(rec.params.filters || {}).map(([field, value]) => ({ field, value }));
+    renderQ4Rows();
+  } else {
+    setBuilderMode(MODE.Q3);
+  }
+}
+
+/* Saved-query sidebar (spec §6.9): compact D38 list with a New Query action;
+   the selected entry is shown distinctly; empty state guides without
+   suggesting unsupported capabilities; nothing is ever seeded. */
+function renderSavedSidebar() {
+  const Sv = S.expl.saved;
+  const el = $("saved-sidebar-list");
+  if (!el) return;
+  if (Sv.error && !Sv.loaded) { setError(el, Sv.error); return; }
+  if (!Sv.loaded && !Sv.error) { el.innerHTML = stateHtml("loading", "Loading…"); return; }
+  if (!Sv.entries.length) {
+    el.innerHTML = stateHtml("empty", "No saved queries yet — run a query in the Query Builder, then Save Query. Nothing is seeded.");
+    return;
+  }
+  el.innerHTML = Sv.entries.map((e) => {
+    const sel = Sv.selected === e.id ? " selected" : "";
+    return '<div class="side-item' + sel + '" data-sid="' + esc(e.id) + '" title="' + esc(e.mode + " " + JSON.stringify(e.params)) + '">' +
+      '<div class="side-id">' + esc(e.id) + "</div>" +
+      '<div class="side-mode">' + esc(e.mode) + "</div></div>";
+  }).join("");
+  el.querySelectorAll(".side-item").forEach((item) => {
+    item.addEventListener("click", async () => {
+      const id = item.getAttribute("data-sid");
+      const entry = Sv.entries.find((e) => e.id === id);
+      if (!entry) return;
+      try {
+        Sv.selected = id;
+        renderSavedSidebar();
+        await loadSavedIntoBuilder(entry);
+      } catch (err) {
+        alert((err.check ? "[" + err.check + "] " : "") + err.message);
+      }
+    });
+  });
+}
+
 async function loadSaved() {
   const Sv = S.expl.saved;
   if (Sv.loaded || Sv.loading) return;
@@ -1181,6 +1309,7 @@ async function loadSaved() {
   } catch (err) {
     Sv.error = err;
     setError($("expl-saved"), err);
+    renderSavedSidebar();
   } finally {
     Sv.loading = false;
   }
@@ -1189,6 +1318,7 @@ async function loadSaved() {
 function renderSaved() {
   const Sv = S.expl.saved;
   const el = $("expl-saved");
+  renderSavedSidebar();
   $("saved-count").textContent = Sv.entries.length + " saved";
   if (!Sv.entries.length) {
     el.innerHTML = stateHtml("empty", "No saved queries. Save one from the Query Builder (Save Query) — definitions are persisted under D38 semantics; nothing is seeded.");
@@ -1209,6 +1339,8 @@ function renderSaved() {
       const act = btn.getAttribute("data-act");
       try {
         if (act === "run") {
+          S.expl.saved.selected = id;
+          renderSavedSidebar();
           S.expl.busy = true;
           $("expl-results").innerHTML = stateHtml("loading", "Executing saved query " + id + "…");
           const doc = await api.savedRun(id);
@@ -1226,28 +1358,15 @@ function renderSaved() {
           renderYearly();
         } else if (act === "update") {
           const doc = await api.savedShow(id);
-          switchTab("builder");
-          const rec = doc.entry;
-          S.expl.builder.quick = null;
-          if (rec.mode === MODE.Q2) {
-            setBuilderMode(MODE.Q2);
-            $("q-date-from").value = rec.params.date_from || "";
-            $("q-date-to").value = rec.params.date_to || "";
-          } else if (rec.mode === MODE.Q3) {
-            setBuilderMode(MODE.Q3);
-            $("q-symbol").value = rec.params.symbol || "";
-            $("q-series").value = rec.params.series || "";
-            $("q-year").value = rec.params.year !== undefined ? rec.params.year : "";
-          } else if (rec.mode === MODE.Q4) {
-            setBuilderMode(MODE.Q4);
-            S.expl.builder.q4 = Object.entries(rec.params.filters || {}).map(([field, value]) => ({ field, value }));
-            renderQ4Rows();
-          }
+          S.expl.saved.selected = id;
+          renderSavedSidebar();
+          await loadSavedIntoBuilder(doc.entry);
         } else if (act === "delete") {
           if (!window.confirm("Delete saved query " + id + "? (the only removal path — D37-DEC §6.3)")) return;
           await api.savedDelete(id);
           Sv.loaded = false;
           Sv.entries = [];
+          Sv.selected = null;
           await loadSaved();
         }
       } catch (err) {
@@ -1341,7 +1460,11 @@ function switchPage(page) {
   $("page-dashboard").hidden = page !== "dashboard";
   $("page-explorer").hidden = page !== "explorer";
   if (page === "dashboard") loadDashboard();
-  if (page === "explorer") { loadQuality(); if (!S.expl.datasetLoaded) renderDatasetSummary(); }
+  if (page === "explorer") {
+    loadQuality();
+    if (!S.expl.datasetLoaded) renderDatasetSummary();
+    if (!S.expl.saved.loaded && !S.expl.saved.loading && !S.expl.saved.error) loadSaved();
+  }
 }
 
 function renderDatasetSummary() {
@@ -1397,6 +1520,12 @@ function wire() {
   $("price-field").addEventListener("change", renderPriceChart);
   $("price-volume").addEventListener("change", renderPriceChart);
   $("hist-record").addEventListener("click", recordCurrentQuery);
+  $("saved-new").addEventListener("click", () => {
+    S.expl.saved.selected = null;
+    switchTab("builder");
+    const f = $("q-symbol");
+    if (f && f.focus) f.focus();
+  });
 }
 
 async function init() {

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Local Historical Data Console</title>
+<title>I4 Historical Data Engine (10-Year NSE Corpus)</title>
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
@@ -12,7 +12,7 @@
   <header id="titlebar" role="banner">
     <div class="tb-mark" aria-hidden="true">I4</div>
     <div class="tb-titles">
-      <div class="tb-title">Local Historical Data Console</div>
+      <div class="tb-title">I4 Historical Data Engine (10-Year NSE Corpus)</div>
       <div class="tb-subtitle">I4 Historical Data Engine — 10-Year NSE Corpus — read-only serving view</div>
     </div>
     <div class="tb-right">
@@ -117,6 +117,15 @@
           </div>
           <div id="expl-dataset" class="run-summary" aria-label="Dataset summary"></div>
         </div>
+        <div class="explorer-body">
+        <aside id="saved-sidebar" class="saved-sidebar" aria-label="Saved queries (D38)">
+          <div class="saved-sidebar-head">
+            <span class="section-label">Saved Queries</span>
+            <button id="saved-new" class="btn btn-small" title="Start a new query in the Query Builder; persist it with Save Query">New Query</button>
+          </div>
+          <div id="saved-sidebar-list" class="saved-sidebar-list"><div class="state-loading">Loading…</div></div>
+        </aside>
+        <div class="explorer-main">
         <div class="tabstrip" role="tablist" aria-label="Query modes">
           <button class="tab" role="tab" data-tab="builder" aria-selected="true">Query Builder</button>
           <button class="tab" role="tab" data-tab="advanced" aria-selected="false" disabled
@@ -265,6 +274,8 @@
             <div class="panel-body" id="hist-detail"></div>
           </div>
         </div>
+        </div>
+      </div>
       </section>
     </main>
   </div>

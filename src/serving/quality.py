@@ -17,9 +17,15 @@ Contract (D16-10 Q8; D16-07; D21 §14; D22 §§5A/6; D23 §§9-10/17(a)):
   class-(3) provenance/evidence, "never resolved") is parsed **only when
   present and valid**. An absent file is a legitimate state meaning no
   unresolved records (served as ``present: false`` with an empty list — never
-  an error, never fabricated). A present file with an unparseable line or a
-  record lacking its ``kind``/``state`` fields fails closed. Records are
-  served as published, in file order.
+  an error, never fabricated). A present file with an unparseable line, a
+  line that is not a record, or a record lacking its ``kind`` field fails
+  closed. The runner revision that writes the file (fingerprint-pinned in the
+  package ``RUN_RECORD``) publishes exactly one stateless record kind — the
+  terminal ``cross-era-boundary-residual`` record (see
+  ``tools/i4_runner/i4_runner.py``, ``_unresolved_records``); its stateless
+  form is the published schema and is served as published. Every other
+  record carries a ``state`` field, which must be a string when present.
+  Records are served as published, in file order.
 * **Reconciliation aggregates** — the package's ``RECONCILIATION.jsonl`` is
   parsed with the shared D31 parser (runner's 14-field schema, as published)
   and aggregated by ``result`` and by ``tier`` (the governed
@@ -54,6 +60,13 @@ from .query import QueryError
 DATA_QUALITY_QUERY_ID = "Q8-data-quality"
 
 UNRESOLVED = "w2/unresolved.jsonl"
+
+# The runner-published record kind that carries no ``state`` field: the
+# terminal cross-era-boundary-residual record appended last by
+# ``_unresolved_records`` (tools/i4_runner/i4_runner.py). Its stateless form
+# is the published schema of the qualified package (canonical data, never
+# reinterpreted); every other published kind carries a string state.
+CROSS_ERA_RESIDUAL = "cross-era-boundary-residual"
 
 
 def _flag_census(index: dict) -> dict:
@@ -91,7 +104,14 @@ def _quarantine_count(baseline: Baseline) -> int:
 
 def parse_unresolved(baseline: Baseline) -> list:
     """Parse ``w2/unresolved.jsonl`` when present; absence is a legitimate
-    no-records state. Present-but-malformed data fails closed."""
+    no-records state. Present-but-malformed data fails closed.
+
+    Validation matches the runner-published schema (the package is canonical
+    and never reinterpreted): every line must be a JSON record with a
+    non-empty string ``kind``; records of the published kinds that carry a
+    ``state`` must carry a string ``state``; the terminal
+    ``cross-era-boundary-residual`` record is published without a ``state``
+    (a non-string state on it is still malformed and fails closed)."""
     path = baseline.path(UNRESOLVED)
     if not os.path.isfile(path):
         return []
@@ -107,10 +127,15 @@ def parse_unresolved(baseline: Baseline) -> list:
             if not isinstance(record, dict):
                 raise QueryError("unresolved-scan", "w2/unresolved.jsonl line %d is not a record" % line_number)
             kind = record.get("kind")
-            state = record.get("state")
             if not isinstance(kind, str) or not kind:
                 raise QueryError("unresolved-scan", "w2/unresolved.jsonl line %d without a kind" % line_number)
-            if not isinstance(state, str):
+            if kind == CROSS_ERA_RESIDUAL:
+                # published stateless form; a present-but-non-string state is malformed
+                # (an explicit JSON null counts as present)
+                if "state" in record and not isinstance(record["state"], str):
+                    raise QueryError("unresolved-scan", "w2/unresolved.jsonl line %d with a non-string state" % line_number)
+            state = record.get("state")
+            if kind != CROSS_ERA_RESIDUAL and not isinstance(state, str):
                 raise QueryError("unresolved-scan", "w2/unresolved.jsonl line %d without a state" % line_number)
             records.append(record)
     return records

@@ -73,7 +73,9 @@ class StaticAssetTests(UiHttpBase):
         self.assertEqual(status, 200)
         self.assertIn("text/html", headers.get("Content-Type"))
         text = payload.decode("utf-8")
-        self.assertIn("Local Historical Data Console", text)
+        # spec §4.1 exact title (TASK65 Phase 4 restored it; the former
+        # "Local Historical Data Console" text was the D1 defect)
+        self.assertIn("I4 Historical Data Engine (10-Year NSE Corpus)", text)
         self.assertIn("Data Explorer", text)
 
     def test_css_and_js_served(self):

@@ -361,6 +361,28 @@ table.data tbody tr.flagged td:nth-child(1) { box-shadow: inset 3px 0 0 var(--wa
 .recon-item { font-family: var(--font-mono); font-size: 10.5px; padding: 3px 6px; border: 1px solid var(--border); border-radius: var(--radius); }
 
 /* ---------------- saved / history ---------------- */
+/* ---------------- explorer: saved-query sidebar (spec §6.9) ---------------- */
+.explorer-body { display: flex; gap: var(--space-4); align-items: flex-start; }
+.explorer-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.saved-sidebar {
+  width: 236px; flex-shrink: 0; display: flex; flex-direction: column; gap: var(--space-2);
+  background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: var(--space-3);
+}
+.saved-sidebar-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.saved-sidebar-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.side-item {
+  padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: transparent; cursor: pointer;
+}
+.side-item:hover { background: var(--hover-row); }
+.side-item.selected { border-color: var(--accent); background: var(--sidebar-active); }
+.side-id { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text-primary); word-break: break-all; }
+.side-mode { font-size: 10.5px; color: var(--text-muted); margin-top: 1px; }
+
+/* dashboard: per-query failure notes (error containment) */
+.dash-failures { margin-top: var(--space-2); display: flex; flex-direction: column; gap: 4px; }
+
 .store-list { display: flex; flex-direction: column; gap: var(--space-2); }
 .store-item {
   display: flex; align-items: center; gap: var(--space-2);

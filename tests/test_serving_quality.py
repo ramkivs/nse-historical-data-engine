@@ -283,6 +283,67 @@ class Q8UnresolvedTests(QualityBase):
         self.assertEqual(ctx.exception.check, "unresolved-scan")
 
 
+class Q8RunnerProducedFileTests(QualityBase):
+    """Regression for the TASK64 finding: the D32 Q8 parser was written
+    against serving fixtures that never contain ``w2/unresolved.jsonl``, so it
+    was never checked against the runner's actual published record set — whose
+    terminal ``cross-era-boundary-residual`` record carries no ``state``. This
+    test runs the real runner over the authorized fixture corpus and passes
+    its output through the Q8 serving parser (fixture only — never the
+    qualified M2 baseline)."""
+
+    def test_runner_produced_unresolved_file_passes_the_q8_parser(self):
+        from tests.test_i4_runner import RunPackageTests
+
+        tc = RunPackageTests("test_w2_outputs_and_unresolved_state_are_present")
+        tc.setUp()
+        try:
+            corpus = tc.make_corpus()
+            out = tc.out_dir()
+            code = tc.invoke(corpus.run_args(out))
+            self.assertEqual(code, 0, tc.last_stderr)
+            self.assertTrue(os.path.isfile(os.path.join(out, "w2", "unresolved.jsonl")))
+            baseline = open_baseline(out)  # self-consistency verification
+            parsed = parse_unresolved(baseline)
+            self.assertTrue(parsed)
+            kinds = [record["kind"] for record in parsed]
+            # the runner publishes the stateless terminal record last
+            self.assertEqual(kinds[-1], "cross-era-boundary-residual")
+            self.assertNotIn("state", parsed[-1])
+            # every other published record in the file carries a string state
+            for record in parsed[:-1]:
+                self.assertIsInstance(record.get("state"), str)
+            # and the full Q8 view serves the file as published, in file order
+            result = query_data_quality(baseline, build_index(baseline))
+            self.assertEqual(result["unresolved"], {"present": True, "record_count": len(parsed), "records": parsed})
+        finally:
+            tc.doCleanups()
+
+    def test_stateless_form_of_other_published_kinds_still_fails_closed(self):
+        # the stateless form is authorized ONLY for cross-era-boundary-residual;
+        # the same file shape with a different kind must still fail closed
+        variant = self.copy_variant("pkg-unres-stateless-other")
+        os.makedirs(os.path.join(variant, "w2"), exist_ok=True)
+        with open(os.path.join(variant, "w2", "unresolved.jsonl"), "w", encoding="utf-8", newline="") as handle:
+            handle.write(json.dumps({"kind": "governance-dependency", "dependency_id": "X", "row_count": 1}, sort_keys=True) + "\n")
+        baseline = self.open_variant(variant, self.resign_package(variant))
+        with self.assertRaises(QueryError) as ctx:
+            parse_unresolved(baseline)
+        self.assertEqual(ctx.exception.check, "unresolved-scan")
+        self.assertIn("without a state", str(ctx.exception))
+
+    def test_cross_era_residual_with_non_string_state_fails_closed(self):
+        variant = self.copy_variant("pkg-unres-nonstring-state")
+        os.makedirs(os.path.join(variant, "w2"), exist_ok=True)
+        with open(os.path.join(variant, "w2", "unresolved.jsonl"), "w", encoding="utf-8", newline="") as handle:
+            handle.write(json.dumps({"kind": "cross-era-boundary-residual", "first_date": "2016-01-01", "last_date": "2026-09-18", "note": "n", "state": None}, sort_keys=True) + "\n")
+        baseline = self.open_variant(variant, self.resign_package(variant))
+        with self.assertRaises(QueryError) as ctx:
+            parse_unresolved(baseline)
+        self.assertEqual(ctx.exception.check, "unresolved-scan")
+        self.assertIn("non-string state", str(ctx.exception))
+
+
 class Q8ReconciliationTests(QualityBase):
     def test_aggregates_by_result_and_tier(self):
         result = query_data_quality(self.handle, self.index)
