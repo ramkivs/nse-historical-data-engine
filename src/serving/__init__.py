@@ -12,9 +12,11 @@ Boundary (D16-09, D23 §§8/10/11/12):
 * this slice implements the Q1 dataset/partition summaries, the Q2 date-range
   query, the Q3 instrument query (D16-10), the Q9 archive inventory query
   (per-archive INPUT_MANIFEST + D01 facts with the explicit M2-only registry
-  absence), and the Q7 record-detail query (one canonical row plus its
-  archive and reconciliation facts), each with row-level D05 §8 provenance
-  where rows are served, over a deterministic, rebuildable read model.
+  absence), the Q7 record-detail query (one canonical row plus its archive
+  and reconciliation facts), and the Q8 data-quality views (flag censuses,
+  quarantine count, unresolved-state records, reconciliation aggregates,
+  and the explicit D21 CHANGED absence), each with row-level D05 §8
+  provenance where rows are served, over a deterministic, rebuildable read model.
 
 Technology (D23 §13 delegated selection, recorded in the D24 implementation record):
 Python 3 standard library only; a plain canonical-JSON index file on local disk;
@@ -55,6 +57,11 @@ from .detail import (
     parse_reconciliation,
     query_record_detail,
 )
+from .quality import (
+    DATA_QUALITY_QUERY_ID,
+    parse_unresolved,
+    query_data_quality,
+)
 from .query import (
     DATE_RANGE_QUERY_ID,
     DATASET_QUERY_ID,
@@ -79,6 +86,9 @@ __all__ = [
     "RECORD_DETAIL_QUERY_ID",
     "parse_reconciliation",
     "query_record_detail",
+    "DATA_QUALITY_QUERY_ID",
+    "parse_unresolved",
+    "query_data_quality",
     "Baseline",
     "BaselineError",
     "BaselineSpec",

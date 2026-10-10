@@ -14,6 +14,8 @@ Commands:
             query (--from --to), or the Q7 record-detail query
             (--file --line); exactly one mode per invocation
   dataset   run the Q1 dataset/partition selection and yearly summaries
+  quality   run the Q8 data-quality view (flag census, quarantine count,
+            unresolved-state records, reconciliation aggregates, D21 absence)
   inventory run the Q9 archive inventory (per-archive INPUT_MANIFEST + D01
             facts; no --state/index dependency)
   rebuild   delete and rebuild the class-(4) state (delegated operation (b))
@@ -33,6 +35,7 @@ from . import baseline as baseline_mod
 from .archive import D01InventoryError, load_d01_inventory, query_archive_inventory
 from .detail import query_record_detail
 from .index import index_state, load_index, write_index, build_index, ServingIndexError
+from .quality import query_data_quality
 from .query import (
     DATE_RANGE_QUERY_ID,
     QUERY_ID,
@@ -168,6 +171,18 @@ def cmd_inventory(args) -> int:
     return 0
 
 
+def cmd_quality(args) -> int:
+    try:
+        handle = _open(args)
+        document, _digest = load_index(args.state, handle)
+        output = query_data_quality(handle, document)
+    except (baseline_mod.BaselineError, ServingIndexError, QueryError) as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return 3
+    _print_json(output)
+    return 0
+
+
 def cmd_rebuild(args) -> int:
     try:
         handle = _open(args)
@@ -246,6 +261,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_dataset.add_argument("--family", default=None, help="restrict to one format family (exact, as-published)")
     p_dataset.add_argument("--year", type=int, default=None, help="restrict to one calendar-year partition")
     p_dataset.set_defaults(func=cmd_dataset)
+
+    p_quality = sub.add_parser(
+        "quality",
+        help="Q8 data-quality view (flag census, quarantine, unresolved, reconciliation, D21 absence)",
+    )
+    add_common(p_quality, state=True)
+    p_quality.set_defaults(func=cmd_quality)
 
     p_inventory = sub.add_parser(
         "inventory",

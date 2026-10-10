@@ -2,10 +2,12 @@
 
 The index is a pure derivation of the verified baseline: one linear pass over every
 class-(1) row file collecting, per row file, the set of (listing_symbol, series)
-instrument pairs present, the row count, and the minimum/maximum as-published
-``business_date`` (format serving-index/1.1). It stores no row values, no raw line
-text, and no clock/host/path value; identical baseline bytes yield a byte-identical
-index (D05 §9 conventions; MD-10 criteria 1/4).
+instrument pairs present, the row count, the minimum/maximum as-published
+``business_date`` (format serving-index/1.1), and — in serving-index/1.2 — the
+global flag census: per governed flag ``name`` (the D05 §5 ``flags[].name``
+field on canonical rows), the number of rows carrying that flag. It stores no row
+values, no raw line text, and no clock/host/path value; identical baseline bytes
+yield a byte-identical index (D05 §9 conventions; MD-10 criteria 1/4).
 
 Deleting the index is never a data event (D16-07): it is always rebuildable from the
 baseline, and when it ever disagrees with the baseline the baseline wins and the
@@ -24,7 +26,7 @@ from .baseline import Baseline
 
 INDEX_FILENAME = "serving_index.json"
 INDEX_DIGEST_FILENAME = "serving_index.sha256"
-INDEX_FORMAT = "serving-index/1.1"
+INDEX_FORMAT = "serving-index/1.2"
 
 
 class ServingIndexError(Exception):
@@ -79,6 +81,7 @@ def build_index(baseline: Baseline) -> dict:
     partitions = {}
     global_pairs = set()
     rows_total = 0
+    flag_census = {}
     for relative in baseline.row_files():
         parts = relative.split("/")
         family, year = parts[1], parts[2]
@@ -110,6 +113,19 @@ def build_index(baseline: Baseline) -> dict:
                         date_min = business_date
                     if date_max is None or business_date > date_max:
                         date_max = business_date
+                # serving-index/1.2: global flag census (D05 §5; never gating).
+                # The census counts what the canonical rows publish, per flag
+                # ``name``; a row without a ``flags`` list carries none. A flag
+                # entry that is not a record with a string ``name`` is a package
+                # integrity failure (fail closed), never a silently skipped flag.
+                flags = obj.get("flags", [])
+                if not isinstance(flags, list):
+                    raise ServingIndexError("index-scan", "canonical row with a non-list flags field in %s" % relative)
+                for flag in flags:
+                    if not isinstance(flag, dict) or not isinstance(flag.get("name"), str) or not flag.get("name"):
+                        raise ServingIndexError("index-scan", "canonical row with a malformed flag entry in %s" % relative)
+                    name = flag["name"]
+                    flag_census[name] = flag_census.get(name, 0) + 1
         rows_total += count
         pairs_list = sorted([list(pair) for pair in pairs])
         files[relative] = {
@@ -135,6 +151,7 @@ def build_index(baseline: Baseline) -> dict:
         "package": _package_identity(baseline),
         "partitions": partitions,
         "files": files,
+        "flag_census": flag_census,
         "counts": {
             "row_files": len(files),
             "row_count": rows_total,

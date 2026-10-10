@@ -45,14 +45,22 @@ UDIFF_HEADER = (
 )
 
 #: member_name -> (family, year, expected_source_date, body lines, expected canonical rows)
+#
+# ISIN policy: base rows carry ISO 6166 mod-10 VALID ISINs, so the only
+# flagged rows in the fixture are the two deliberate data-quality rows
+# (TCS 2016-01-04: failing check digit; TCS 2016-01-05: invalid length) and
+# WIPRO's blank ISIN (validity BLANK — no flag, D05 §5).
 MEMBERS: Dict[str, Tuple[str, str, str, List[str]]] = {
     "fix-leg-2016-01-04.csv": (
         contract.FAMILY_LEGACY,
         "2016",
         "2016-01-04",
         [
-            "RELIANCE,EQ,1000.00,1050.00,990.00,1040.00,1039.50,1000.00,1200000,1250000000.00,04-JAN-2016,8500,INE002A01017",
-            "TCS,EQ,3500.00,3560.00,3480.00,3545.00,3540.00,3500.00,450000,1596250000.00,04-JAN-2016,3200,INE467B01024",
+            "RELIANCE,EQ,1000.00,1050.00,990.00,1040.00,1039.50,1000.00,1200000,1250000000.00,04-JAN-2016,8500,INE002A01018",
+            # TCS with a deliberately defective ISIN (fails the ISO 6166 mod-10
+            # check digit) — exercises the governed isin_invalid_checkdigit flag
+            # (D05 §5; informational, never gating) for the Q8 flag census.
+            "TCS,EQ,3500.00,3560.00,3480.00,3545.00,3540.00,3500.00,450000,1596250000.00,04-JAN-2016,3200,INE000000006",
             "WIPRO,EQ,1200.00,1230.00,1195.00,1225.00,1220.00,1200.00,80000,98000000.00,04-JAN-2016,1500,",
         ],
         3,
@@ -62,8 +70,11 @@ MEMBERS: Dict[str, Tuple[str, str, str, List[str]]] = {
         "2016",
         "2016-01-05",
         [
-            "RELIANCE,EQ,1040.00,1060.00,1030.00,1055.00,1050.00,1039.50,1300000,1371500000.00,05-JAN-2016,9100,INE002A01017",
-            "TCS,EQ,3545.00,3600.00,3530.00,3590.00,3585.00,3540.00,480000,1719600000.00,05-JAN-2016,3400,INE467B01024",
+            "RELIANCE,EQ,1040.00,1060.00,1030.00,1055.00,1050.00,1039.50,1300000,1371500000.00,05-JAN-2016,9100,INE002A01018",
+            # TCS with a deliberately defective ISIN (invalid length after trim)
+            # — exercises the governed isin_invalid_length flag (D05 §5) for the
+            # Q8 flag census.
+            "TCS,EQ,3545.00,3600.00,3530.00,3590.00,3585.00,3540.00,480000,1719600000.00,05-JAN-2016,3400,INE123",
         ],
         2,
     ),
@@ -72,7 +83,7 @@ MEMBERS: Dict[str, Tuple[str, str, str, List[str]]] = {
         "2017",
         "2017-02-06",
         [
-            "RELIANCE,EQ,2500.00,2540.00,2480.00,2535.00,2530.00,2500.00,900000,2281500000.00,06-FEB-2017,7600,INE002A01017",
+            "RELIANCE,EQ,2500.00,2540.00,2480.00,2535.00,2530.00,2500.00,900000,2281500000.00,06-FEB-2017,7600,INE002A01018",
             "INFY,EQ,1100.00,1120.00,1090.00,1115.00,1110.00,1100.00,250000,278750000.00,06-FEB-2017,2100,INE009A01021",
         ],
         2,
@@ -82,10 +93,10 @@ MEMBERS: Dict[str, Tuple[str, str, str, List[str]]] = {
         "2024",
         "2024-03-05",
         [
-            "2024-03-05,2024-03-05,CM,NSE,STK,500325,INE002A01017,RELIANCE,EQ,,,,,"
+            "2024-03-05,2024-03-05,CM,NSE,STK,500325,INE002A01018,RELIANCE,EQ,,,,,"
             "RELIANCE INDUSTRIES LTD,1010.00,1035.00,1005.00,1030.00,1028.50,1008.00,,"
             "1029.00,,,1500000,1543500000.00,11200,F1,2,,,,,",
-            "2024-03-05,2024-03-05,CM,NSE,STK,500304,INE467B01024,TCS,EQ,,,,,"
+            "2024-03-05,2024-03-05,CM,NSE,STK,500304,INE467B01029,TCS,EQ,,,,,"
             "TATA CONSULTANCY SERVICES LTD,3560.00,3610.00,3550.00,3600.00,3595.00,3555.00,,"
             "3605.00,,,470000,1693850000.00,3350,F1,10,,,,,",
         ],

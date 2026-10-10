@@ -417,12 +417,12 @@ class Q2DateRangeQueryTests(QueryBase):
             self.assertNotIn("raw_line", row)
 
 
-class IndexV11FormatTests(QueryBase):
-    """serving-index/1.1: per-file business_date bounds, format refusal."""
+class IndexV12FormatTests(QueryBase):
+    """serving-index/1.2: per-file business_date bounds, flag census, format refusal."""
 
     def test_format_marker_and_per_file_date_bounds(self):
         document, _digest = load_index(self.state, self.handle)
-        self.assertEqual(document["format"], "serving-index/1.1")
+        self.assertEqual(document["format"], "serving-index/1.2")
         expected = {
             "partitions/legacy13/2016/rows/fix-leg-2016-01-04.csv.rows.jsonl": ("2016-01-04", "2016-01-04"),
             "partitions/legacy13/2016/rows/fix-leg-2016-01-05.csv.rows.jsonl": ("2016-01-05", "2016-01-05"),
@@ -447,13 +447,15 @@ class IndexV11FormatTests(QueryBase):
         from serving.index import canonical_json
 
         document, _digest = load_index(self.state, self.handle)
-        for old_format in ("serving-index/1.0", "serving-index/9.9"):
+        for old_format in ("serving-index/1.0", "serving-index/1.1", "serving-index/9.9"):
             old = json.loads(json.dumps(document))
             old["format"] = old_format
             if old_format == "serving-index/1.0":
                 for meta in old["files"].values():
                     meta.pop("business_date_min", None)
                     meta.pop("business_date_max", None)
+            if old_format == "serving-index/1.1":
+                old.pop("flag_census", None)
             text = canonical_json(old) + "\n"
             digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
             with open(os.path.join(self.state, INDEX_FILENAME), "w", encoding="utf-8", newline="") as handle:

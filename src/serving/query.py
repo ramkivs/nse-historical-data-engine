@@ -138,7 +138,7 @@ def query_date_range(
     Both bounds are **inclusive** ISO business dates (YYYY-MM-DD) compared by
     exact as-published value — no normalisation, no expression language.
     Candidate files are narrowed with the per-file ``business_date`` bounds
-    stored in the class-(4) index (serving-index/1.1); a file whose bounds are
+    stored in the class-(4) index (serving-index/1.2); a file whose bounds are
     unknown (no dated row) or disjoint from the range cannot match and is
     skipped. Every row of a candidate file is then re-checked against its exact
     as-published ``business_date``: a row whose business_date is absent, blank,
@@ -244,7 +244,7 @@ def query_dataset_summary(
       of the result).
     """
     if not isinstance(index, dict):
-        raise QueryError("query-input", "index must be the class-(4) index document (serving-index/1.1)")
+        raise QueryError("query-input", "index must be the class-(4) index document (serving-index/1.2)")
     if family is not None and not isinstance(family, str):
         raise QueryError("query-input", "family must be a string")
     year_str: Optional[str] = None

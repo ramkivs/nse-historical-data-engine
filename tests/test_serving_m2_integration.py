@@ -28,6 +28,7 @@ from tests import support
 from serving.archive import load_d01_inventory, query_archive_inventory
 from serving.baseline import DEFAULT_M2_SPEC, BaselineError, open_baseline
 from serving.detail import query_record_detail
+from serving.quality import query_data_quality
 from serving.index import build_index, load_index, write_index
 from serving.query import DATE_RANGE_QUERY_ID, query_date_range, query_dataset_summary, query_instrument
 from serving.rebuild import rebuild_state
@@ -209,6 +210,38 @@ class M2RealPackageIntegrationTests(unittest.TestCase):
             self.assertEqual(record["input_identity"]["relative_path"], archive["relative_path"])
         again = query_record_detail(self.handle, document, source_file, line_number)
         self.assertEqual(json.dumps(again, sort_keys=True), json.dumps(detail, sort_keys=True))
+
+    def test_q8_data_quality_over_real_baseline(self):
+        # Q8 over the actual qualified M2 baseline: the flag census is a census
+        # of governed names, the quarantine count is preserved as published
+        # (zero stays zero), the reconciliation aggregates corroborate the
+        # completion marker (39,402 records), the unresolved file is parsed as
+        # published, and D21 CHANGED findings are explicitly absent.
+        document, _digest = load_index(self.state, self.handle)
+        result = query_data_quality(self.handle, document)
+        self.assertEqual(result["query"], "Q8-data-quality")
+        for count in result["flag_census"].values():
+            self.assertIsInstance(count, int)
+            self.assertGreaterEqual(count, 0)
+        self.assertEqual(result["quarantine"]["count"], 0)
+        self.assertEqual(self.handle.run_record["counts"]["quarantined"], 0)
+        self.assertEqual(result["reconciliation"]["record_count"], 39402)
+        self.assertEqual(
+            result["reconciliation"]["by_result"], self.handle.marker["reconciliation"]["by_result"]
+        )
+        self.assertEqual(
+            result["reconciliation"]["by_tier"], self.handle.marker["reconciliation"]["by_tier"]
+        )
+        self.assertTrue(result["unresolved"]["present"])
+        self.assertGreater(result["unresolved"]["record_count"], 0)
+        for record in result["unresolved"]["records"]:
+            self.assertIsInstance(record.get("kind"), str)
+            self.assertIsInstance(record.get("state"), str)
+        self.assertEqual(result["changed"]["present"], False)
+        self.assertEqual(result["changed"]["status"], "absent-in-m2-only-release")
+        self.assertEqual(result["changed"]["findings"], [])
+        again = query_data_quality(self.handle, document)
+        self.assertEqual(json.dumps(again, sort_keys=True), json.dumps(result, sort_keys=True))
 
 
 if __name__ == "__main__":
