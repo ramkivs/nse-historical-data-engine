@@ -16,7 +16,6 @@ it (D24 record, §13; D23 closure item 2 is met only by the real-package run).
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 from typing import Dict, List, Tuple
 
@@ -130,10 +129,11 @@ def build_fixture_package(out_dir: str) -> dict:
     ).hexdigest()
 
     input_manifest_lines = []
+    input_manifest_records = []
     reconciliation_lines = []
     partition_files: Dict[str, List[str]] = {}
     rows_total = 0
-    for member_name in sorted(MEMBERS):
+    for sequence, member_name in enumerate(sorted(MEMBERS), start=1):
         family, year, expected_date, _lines = MEMBERS[member_name]
         data = _member_bytes(member_name)
         source = SourceDescriptor(
@@ -154,22 +154,36 @@ def build_fixture_package(out_dir: str) -> dict:
         _write_text(out_dir, rows_relative, rows_jsonl(build.rows))
         _write_text(out_dir, evidence_relative, evidence_json(build))
         partition_files.setdefault(partition, []).extend([rows_relative, evidence_relative])
-        input_manifest_lines.append(
-            canonical_json(
-                {
-                    "source_archive": member_name,
-                    "member_name": member_name,
-                    "archive_sha256": member_sha256[member_name],
-                    "archive_sha256_basis": "computed-fixture-member-bytes",
-                    "format_family": family,
-                    "partition": partition,
-                    "row_count": len(build.rows),
-                    "rows_jsonl_sha256": json.loads(evidence_json(build))["rows_jsonl_sha256"],
-                    "run_id": FIXTURE_RUN_ID,
-                }
-            )
-            + "\n"
-        )
+        # Runner-schema INPUT_MANIFEST record (tools/i4_runner/i4_runner.py is the
+        # package owner). Synthetic but honest: the archive digests are computed
+        # from the fixture member bytes, and the basis says exactly that — never
+        # "D01-inventory" (the fixture has no D01 inventory).
+        report = build.parse.report
+        root = "LEGACY" if family == contract.FAMILY_LEGACY else "UDIFF"
+        manifest_record = {
+            "sequence": sequence,
+            "root": root,
+            "relative_path": member_name,
+            "file_name": member_name,
+            "member_name": member_name,
+            "date_from_filename": expected_date,
+            "detected_format": root,
+            "engine_family": report.format_family,
+            "partition": partition,
+            "archive_sha256_d01": member_sha256[member_name],
+            "archive_sha256_basis": "computed-fixture-member-bytes",
+            "archive_sha256_observed_raw_bytes": member_sha256[member_name],
+            "member_sha256_raw_bytes": report.member_sha256_raw_bytes,
+            "member_sha256_lf_text": report.member_sha256_lf_text,
+            "member_size_bytes": report.member_size_bytes,
+            "header_physical_width": report.header_physical_width,
+            "header_tolerance_applied": report.header_tolerance_applied,
+            "data_lines": report.data_lines,
+            "rows": len(build.rows),
+            "quarantined": report.quarantined,
+        }
+        input_manifest_records.append(manifest_record)
+        input_manifest_lines.append(canonical_json(manifest_record) + "\n")
         reconciliation_lines.append(
             canonical_json(
                 {
@@ -182,14 +196,49 @@ def build_fixture_package(out_dir: str) -> dict:
         )
 
     _write_text(out_dir, "INPUT_MANIFEST.jsonl", "".join(input_manifest_lines))
+
+    engine_sha = tool_fingerprint()
+    runner_sha = _module_sha256()
+    config_fp = DEFAULT_CONFIG.fingerprint()
     _write_text(
         out_dir,
         "GOVERNED_INPUTS.json",
         canonical_json(
             {
-                "archive_count": EXPECTED_MEMBERS,
-                "archive_set_digest": archive_set_digest,
-                "basis": "d24 synthetic fixture (never the M2 corpus)",
+                "contract_version": "D24-fixture/1.0",
+                "run_id": FIXTURE_RUN_ID,
+                "files": sorted(
+                    [
+                        {
+                            "role": "archive",
+                            "path_label": record["relative_path"],
+                            "sha256": record["archive_sha256_d01"],
+                        }
+                        for record in input_manifest_records
+                    ],
+                    key=lambda fact: (fact["role"], fact["path_label"]),
+                ),
+                "corpus": {
+                    "root_labels": ["LEGACY", "UDIFF"],
+                    "archive_count": EXPECTED_MEMBERS,
+                    "archive_set_digest": archive_set_digest,
+                    "hash_basis": "sha256 of member sha256 concatenation sorted by member_name (d24 fixture)",
+                },
+                "engine_identity": {
+                    "spec_version": contract.SPEC_VERSION,
+                    "tool_name": contract.TOOL_NAME,
+                    "tool_sha256": engine_sha,
+                    "tool_version": contract.TOOL_VERSION,
+                },
+                "runner_identity": {
+                    "contract_version": "D24-fixture/1.0",
+                    "runner_name": "d24-fixture-builder",
+                    "runner_sha256": runner_sha,
+                    "runner_version": "d24-fixture-1.0.0",
+                },
+                "governed_config": DEFAULT_CONFIG.to_dict(),
+                "config_fingerprint": config_fp,
+                "note": "d24 synthetic fixture (never the M2 corpus)",
             }
         )
         + "\n",
@@ -201,9 +250,6 @@ def build_fixture_package(out_dir: str) -> dict:
     )
     _write_text(out_dir, "RECONCILIATION.jsonl", "".join(reconciliation_lines))
 
-    engine_sha = tool_fingerprint()
-    runner_sha = _module_sha256()
-    config_fp = DEFAULT_CONFIG.fingerprint()
     composite = hashlib.sha256(
         canonical_json(
             {

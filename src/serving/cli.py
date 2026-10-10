@@ -13,11 +13,13 @@ Commands:
   query     run the Q3 instrument query (symbol series) or the Q2 date-range
             query (--from --to); exactly one mode per invocation
   dataset   run the Q1 dataset/partition selection and yearly summaries
+  inventory run the Q9 archive inventory (per-archive INPUT_MANIFEST + D01
+            facts; no --state/index dependency)
   rebuild   delete and rebuild the class-(4) state (delegated operation (b))
   info      print a diagnostic summary of the serving state
 
-Exit codes: 0 = ok; 2 = usage/verification failure (fail closed); 3 = index/stale
-failure. No partial results are printed on failure.
+Exit codes: 0 = ok; 2 = usage/verification/query failure (fail closed); 3 =
+index/stale failure. No partial results are printed on failure.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ import json
 import sys
 
 from . import baseline as baseline_mod
+from .archive import D01InventoryError, load_d01_inventory, query_archive_inventory
 from .index import index_state, load_index, write_index, build_index, ServingIndexError
 from .query import (
     DATE_RANGE_QUERY_ID,
@@ -141,6 +144,18 @@ def cmd_dataset(args) -> int:
     return 0
 
 
+def cmd_inventory(args) -> int:
+    try:
+        handle = _open(args)
+        d01 = load_d01_inventory() if args.m2 else None
+        output = query_archive_inventory(handle, d01=d01)
+    except (baseline_mod.BaselineError, D01InventoryError, QueryError) as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return 2
+    _print_json(output)
+    return 0
+
+
 def cmd_rebuild(args) -> int:
     try:
         handle = _open(args)
@@ -206,6 +221,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_dataset.add_argument("--family", default=None, help="restrict to one format family (exact, as-published)")
     p_dataset.add_argument("--year", type=int, default=None, help="restrict to one calendar-year partition")
     p_dataset.set_defaults(func=cmd_dataset)
+
+    p_inventory = sub.add_parser(
+        "inventory",
+        help="Q9 archive inventory (per-archive INPUT_MANIFEST + D01 facts; no index)",
+    )
+    add_common(p_inventory)
+    p_inventory.set_defaults(func=cmd_inventory)
 
     p_rebuild = sub.add_parser("rebuild", help="delete and rebuild class-(4) state (op b)")
     add_common(p_rebuild, state=True)

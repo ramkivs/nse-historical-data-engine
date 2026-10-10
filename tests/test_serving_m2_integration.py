@@ -18,12 +18,14 @@ Two distinct kinds of evidence, kept strictly separate (D24 record §13):
 
 from __future__ import annotations
 
+import json
 import os
 import tarfile
 import tempfile
 import unittest
 
 from tests import support
+from serving.archive import load_d01_inventory, query_archive_inventory
 from serving.baseline import DEFAULT_M2_SPEC, BaselineError, open_baseline
 from serving.index import build_index, load_index, write_index
 from serving.query import DATE_RANGE_QUERY_ID, query_date_range, query_dataset_summary, query_instrument
@@ -162,6 +164,23 @@ class M2RealPackageIntegrationTests(unittest.TestCase):
         report = rebuild_state(self.handle, self.state)
         self.assertTrue(report["identical"], "rebuild over an unchanged M2 baseline must be byte-identical")
         self.assertEqual(report["rows_scanned"], 5689949)
+
+    def test_q9_archive_inventory_over_real_baseline(self):
+        # Q9 over the actual qualified M2 baseline: 2,462 archives, a complete
+        # D01 join (every archive_sha256_d01 equal to its D01 inventory sha256),
+        # the explicit registry absence, and deterministic repeated output.
+        d01 = load_d01_inventory()
+        result = query_archive_inventory(self.handle, d01=d01)
+        self.assertEqual(result["summary"]["archive_count"], 2462)
+        self.assertEqual(len(result["archives"]), 2462)
+        self.assertEqual(result["summary"]["d01_inventory"]["present"], True)
+        self.assertEqual(result["summary"]["d01_inventory"]["record_count"], 2462)
+        for archive in result["archives"]:
+            self.assertIsNotNone(archive["d01"])
+            self.assertEqual(archive["d01"]["sha256"], archive["archive_sha256_d01"])
+            self.assertEqual(archive["registry"], {"present": False, "status": "absent-in-m2-only-release"})
+        again = query_archive_inventory(self.handle, d01=d01)
+        self.assertEqual(json.dumps(again, sort_keys=True), json.dumps(result, sort_keys=True))
 
 
 if __name__ == "__main__":
