@@ -13,10 +13,13 @@ Boundary (D16-09, D23 §§8/10/11/12):
   query, the Q3 instrument query (D16-10), the Q9 archive inventory query
   (per-archive INPUT_MANIFEST + D01 facts with the explicit M2-only registry
   absence), the Q7 record-detail query (one canonical row plus its archive
-  and reconciliation facts), and the Q8 data-quality views (flag censuses,
+  and reconciliation facts), the Q8 data-quality views (flag censuses,
   quarantine count, unresolved-state records, reconciliation aggregates,
-  and the explicit D21 CHANGED absence), each with row-level D05 §8
-  provenance where rows are served, over a deterministic, rebuildable read model.
+  and the explicit D21 CHANGED absence), and the Q10 qualification/evidence
+  views (run identity, fingerprints, manifests, and the durable R6/D11/D12/
+  D14 in-repository evidence, kept distinct from package data), each with
+  row-level D05 §8 provenance where rows are served, over a deterministic,
+  rebuildable read model.
 
 Technology (D23 §13 delegated selection, recorded in the D24 implementation record):
 Python 3 standard library only; a plain canonical-JSON index file on local disk;
@@ -62,6 +65,10 @@ from .quality import (
     parse_unresolved,
     query_data_quality,
 )
+from .qualification import (
+    QUALIFICATION_QUERY_ID,
+    query_qualification,
+)
 from .query import (
     DATE_RANGE_QUERY_ID,
     DATASET_QUERY_ID,
@@ -89,6 +96,8 @@ __all__ = [
     "DATA_QUALITY_QUERY_ID",
     "parse_unresolved",
     "query_data_quality",
+    "QUALIFICATION_QUERY_ID",
+    "query_qualification",
     "Baseline",
     "BaselineError",
     "BaselineSpec",

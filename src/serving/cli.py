@@ -16,6 +16,8 @@ Commands:
   dataset   run the Q1 dataset/partition selection and yearly summaries
   quality   run the Q8 data-quality view (flag census, quarantine count,
             unresolved-state records, reconciliation aggregates, D21 absence)
+  qualification run the Q10 qualification/evidence view (run identity,
+            fingerprints, manifests, R6/D11/D12/D14 evidence; optional --repo)
   inventory run the Q9 archive inventory (per-archive INPUT_MANIFEST + D01
             facts; no --state/index dependency)
   rebuild   delete and rebuild the class-(4) state (delegated operation (b))
@@ -35,6 +37,7 @@ from . import baseline as baseline_mod
 from .archive import D01InventoryError, load_d01_inventory, query_archive_inventory
 from .detail import query_record_detail
 from .index import index_state, load_index, write_index, build_index, ServingIndexError
+from .qualification import query_qualification
 from .quality import query_data_quality
 from .query import (
     DATE_RANGE_QUERY_ID,
@@ -171,6 +174,17 @@ def cmd_inventory(args) -> int:
     return 0
 
 
+def cmd_qualification(args) -> int:
+    try:
+        handle = _open(args)
+        output = query_qualification(handle, repo_root=args.repo)
+    except (baseline_mod.BaselineError, QueryError) as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return 3
+    _print_json(output)
+    return 0
+
+
 def cmd_quality(args) -> int:
     try:
         handle = _open(args)
@@ -261,6 +275,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_dataset.add_argument("--family", default=None, help="restrict to one format family (exact, as-published)")
     p_dataset.add_argument("--year", type=int, default=None, help="restrict to one calendar-year partition")
     p_dataset.set_defaults(func=cmd_dataset)
+
+    p_qualification = sub.add_parser(
+        "qualification",
+        help="Q10 qualification/evidence view (run identity, fingerprints, manifests, R6/D11/D12/D14 evidence)",
+    )
+    add_common(p_qualification)
+    p_qualification.add_argument(
+        "--repo",
+        default=None,
+        help="repository root holding the durable in-repository evidence records (R6/D11/D12/D14); omit for explicit absence",
+    )
+    p_qualification.set_defaults(func=cmd_qualification)
 
     p_quality = sub.add_parser(
         "quality",

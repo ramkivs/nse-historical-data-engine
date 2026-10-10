@@ -28,6 +28,7 @@ from tests import support
 from serving.archive import load_d01_inventory, query_archive_inventory
 from serving.baseline import DEFAULT_M2_SPEC, BaselineError, open_baseline
 from serving.detail import query_record_detail
+from serving.qualification import query_qualification
 from serving.quality import query_data_quality
 from serving.index import build_index, load_index, write_index
 from serving.query import DATE_RANGE_QUERY_ID, query_date_range, query_dataset_summary, query_instrument
@@ -241,6 +242,42 @@ class M2RealPackageIntegrationTests(unittest.TestCase):
         self.assertEqual(result["changed"]["status"], "absent-in-m2-only-release")
         self.assertEqual(result["changed"]["findings"], [])
         again = query_data_quality(self.handle, document)
+        self.assertEqual(json.dumps(again, sort_keys=True), json.dumps(result, sort_keys=True))
+
+    def test_q10_qualification_over_real_baseline(self):
+        # Q10 over the actual qualified M2 baseline: the run identity,
+        # fingerprints, and manifest facts as published; the durable evidence
+        # associates by verified identity when the repository root is provided
+        # (D24_REPO_ROOT), and is reported explicitly absent otherwise.
+        repo_root = os.environ.get("D24_REPO_ROOT") or None
+        result = query_qualification(self.handle, repo_root=repo_root)
+        package = result["package"]
+        self.assertEqual(package["run_identity"]["run_id"], "i4-20261008-M2")
+        self.assertEqual(
+            package["run_identity"]["composite_run_identity"],
+            "9609c7fccef1d2438810a564ef70aa8232d8ad1c69fded8702e488c13657802d",
+        )
+        self.assertEqual(package["engine_identity"]["tool_sha256"], "d3269b731008a0d544eaa7e96d6c6b75cf94dfd6ce31d8fb5e1f23fdf10a80e9")
+        self.assertEqual(package["runner_identity"]["runner_sha256"], "f3ebf62488716ea3f4fff76b104760dfee7df45c81af253a4faf352beb624c4a")
+        self.assertEqual(package["corpus"]["archive_count"], 2462)
+        self.assertEqual(package["counts"]["quarantined"], 0)
+        self.assertEqual(package["manifests"]["package_manifest_sha256"], self.handle.manifest_digest)
+        self.assertEqual(package["manifests"]["file_count"], DEFAULT_M2_SPEC.file_count)
+        self.assertTrue(result["pinned_identity"]["pinned"])
+        self.assertEqual(package["governed_inputs"]["present"], True)
+        evidence = result["evidence"]
+        if repo_root is not None:
+            self.assertEqual(evidence["d11"]["association"], "associated")
+            self.assertTrue(evidence["d11"]["verified"]["tarball_sha256"]["match"])
+            self.assertEqual(evidence["r6"]["association"], "associated")
+            self.assertEqual(evidence["r6"]["result"], "pass")
+            self.assertEqual(evidence["d12"]["association"], "associated")
+            self.assertTrue(evidence["d12"]["r6_verdict_sha256_check"]["match"])
+            self.assertEqual(evidence["d14"]["association"], "not-identity-bound")
+        else:
+            for key in ("r6", "d11", "d12", "d14"):
+                self.assertEqual(evidence[key]["association"], "absent")
+        again = query_qualification(self.handle, repo_root=repo_root)
         self.assertEqual(json.dumps(again, sort_keys=True), json.dumps(result, sort_keys=True))
 
 
