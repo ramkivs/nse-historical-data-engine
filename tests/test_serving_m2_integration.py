@@ -32,7 +32,14 @@ from serving.qualification import query_qualification
 from serving.quality import query_data_quality
 from serving.query import query_filters
 from serving.index import build_index, load_index, write_index
-from serving.query import DATE_RANGE_QUERY_ID, query_date_range, query_dataset_summary, query_instrument
+from serving.query import (
+    ASSOCIATIONS_FILE,
+    DATE_RANGE_QUERY_ID,
+    query_associations,
+    query_date_range,
+    query_dataset_summary,
+    query_instrument,
+)
 from serving.rebuild import rebuild_state
 
 TRANSFER = "evidence/D11_REPLAY_QUALIFICATION_20261009/D11_E1_E10_TRANSFER_20261009.tar.gz"
@@ -304,6 +311,42 @@ class M2RealPackageIntegrationTests(unittest.TestCase):
         self.assertEqual(query_filters(self.handle, document, {"segment": "__NONE__"}), ())
         again = query_filters(self.handle, document, {"segment": "CM"})
         self.assertEqual(json.dumps(again, sort_keys=True), json.dumps(cm, sort_keys=True))
+
+    def test_q5_associations_over_real_baseline(self):
+        # Q5 over the actual qualified M2 baseline: the W2 associations file
+        # is present, identity lookup by the first published correlation key
+        # returns that key's document, instrument lookup by a published
+        # (symbol, series) pair returns only matching intervals, no served
+        # interval carries an overlay series (D05 §3.5), and results are
+        # deterministic. Serving-behavior assertions only — no corpus counts
+        # are assumed and the corpus is not re-qualified.
+        document, _digest = load_index(self.state, self.handle)
+        with open(self.handle.path(ASSOCIATIONS_FILE), "r", encoding="utf-8") as handle:
+            first_key = json.loads(next(handle))["security_id"]
+        identity = query_associations(self.handle, document, security_id=first_key)
+        self.assertEqual(len(identity), 1)
+        self.assertEqual(identity[0]["security_id"], first_key)
+        self.assertEqual(identity[0]["identity_basis"], "isin_correlation_key_upper_trim")
+        self.assertGreater(len(identity[0]["associations"]), 0)
+        for association in identity[0]["associations"]:
+            self.assertEqual(association["association_type"], "corpus-observed")
+            self.assertEqual(association["interval_basis"], "observed-range")
+            self.assertEqual(association["security_id"], first_key)
+            self.assertNotIn(association["series"], ("BL", "BO", "T0", "IT", "IL"))
+        first_association = identity[0]["associations"][0]
+        intervals = query_associations(
+            self.handle,
+            document,
+            symbol=first_association["symbol"],
+            series=first_association["series"],
+        )
+        self.assertGreater(len(intervals), 0)
+        for interval in intervals:
+            self.assertEqual(interval["symbol"], first_association["symbol"])
+            self.assertEqual(interval["series"], first_association["series"])
+            self.assertNotIn(interval["series"], ("BL", "BO", "T0", "IT", "IL"))
+        again = query_associations(self.handle, document, security_id=first_key)
+        self.assertEqual(json.dumps(again, sort_keys=True), json.dumps(identity, sort_keys=True))
 
 
 if __name__ == "__main__":

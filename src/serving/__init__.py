@@ -12,6 +12,9 @@ Boundary (D16-09, D23 §§8/10/11/12):
 * this slice implements the Q1 dataset/partition summaries, the Q2 date-range
   query, the Q3 instrument query (D16-10), the Q4 exact-value filter query
   (series / segment / source / instrument_type as-published values only),
+  the Q5 identity/association query (identity documents by the D05 §6.1
+  correlation key and the instrument's dated-association intervals from the
+  class-(2) W2 output; exact-value selectors only; no overlay aggregation),
   the Q9 archive inventory query
   (per-archive INPUT_MANIFEST + D01 facts with the explicit M2-only registry
   absence), the Q7 record-detail query (one canonical row plus its archive
@@ -72,11 +75,15 @@ from .qualification import (
     query_qualification,
 )
 from .query import (
+    ASSOCIATIONS_FILE,
+    ASSOCIATIONS_QUERY_ID,
     DATE_RANGE_QUERY_ID,
     DATASET_QUERY_ID,
     QUERY_ID,
     QueryError,
     partitions_listing,
+    parse_associations,
+    query_associations,
     query_date_range,
     query_dataset_summary,
     query_filters,
@@ -114,11 +121,15 @@ __all__ = [
     "QUERY_ID",
     "DATASET_QUERY_ID",
     "DATE_RANGE_QUERY_ID",
+    "ASSOCIATIONS_QUERY_ID",
+    "ASSOCIATIONS_FILE",
     "QueryError",
     "partitions_listing",
     "query_instrument",
     "query_dataset_summary",
     "query_date_range",
     "query_filters",
+    "query_associations",
+    "parse_associations",
     "rebuild_state",
 ]

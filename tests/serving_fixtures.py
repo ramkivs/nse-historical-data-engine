@@ -31,6 +31,7 @@ from nse_engine import (  # noqa: E402
     rows_jsonl,
     tool_fingerprint,
 )
+from nse_engine.identity import AssociationAccumulator  # noqa: E402
 from nse_engine.provenance import sha256_bytes  # noqa: E402
 from serving.baseline import BaselineSpec, PACKAGE_MANIFEST, COMPLETION_MARKER  # noqa: E402
 
@@ -180,6 +181,11 @@ def build_fixture_package(out_dir: str) -> dict:
     reconciliation_lines = []
     partition_files: Dict[str, List[str]] = {}
     rows_total = 0
+    # Q5 source (w2/associations.jsonl): the engine's own W2 identity output over the
+    # fixture's canonical rows — the same single accumulation the runner performs
+    # (per member, in build order; D05 §3.2/§3.3). The engine computes every
+    # document: no hand-crafted identity, no invented relationship (D23 §10).
+    association_acc = AssociationAccumulator()
     for sequence, member_name in enumerate(sorted(MEMBERS), start=1):
         family, year, expected_date, lines, expected_rows = MEMBERS[member_name]
         data = _member_bytes(member_name)
@@ -195,6 +201,7 @@ def build_fixture_package(out_dir: str) -> dict:
         if build.quarantined:
             raise AssertionError("fixture member produced quarantined rows: %s" % member_name)
         rows_total += len(build.rows)
+        association_acc.add_security_rows(build.rows)
         partition = "%s/%s" % (family, year)
         rows_relative = "partitions/%s/rows/%s.rows.jsonl" % (partition, member_name)
         evidence_relative = "partitions/%s/evidence/%s.evidence.json" % (partition, member_name)
@@ -265,6 +272,16 @@ def build_fixture_package(out_dir: str) -> dict:
                 )
             for record in reconciliation_records:
                 reconciliation_lines.append(canonical_json(record) + "\n")
+
+    # Class-(2) W2 output (the runner's own writer convention: canonical_json per
+    # line): one SecurityIdentity document per line, in the engine's sorted
+    # normalized-ISIN key order. The fixture has no overlay-series rows, so the
+    # engine's observed-overlay exclusion excludes nothing here; WIPRO's blank-
+    # ISIN rows are unkeyed and produce no document (D05 §3.2).
+    associations_lines = []
+    for identity_document in association_acc.identity_documents():
+        associations_lines.append(canonical_json(identity_document.to_dict()) + "\n")
+    _write_text(out_dir, "w2/associations.jsonl", "".join(associations_lines))
 
     _write_text(out_dir, "INPUT_MANIFEST.jsonl", "".join(input_manifest_lines))
 

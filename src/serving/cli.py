@@ -12,7 +12,9 @@ Commands:
   build     build the class-(4) index from the verified baseline into --state
   query     run the Q3 instrument query (symbol series), the Q2 date-range
             query (--from --to), the Q4 exact-value filter query
-            (--field NAME=VALUE, repeatable), or the Q7 record-detail query
+            (--field NAME=VALUE, repeatable), the Q5 identity/association
+            query (--identity KEY and/or --instrument-symbol S
+            --instrument-series SER), or the Q7 record-detail query
             (--file --line); exactly one mode per invocation
   dataset   run the Q1 dataset/partition selection and yearly summaries
   quality   run the Q8 data-quality view (flag census, quarantine count,
@@ -41,10 +43,13 @@ from .index import index_state, load_index, write_index, build_index, ServingInd
 from .qualification import query_qualification
 from .quality import query_data_quality
 from .query import (
+    ASSOCIATIONS_QUERY_ID,
     DATE_RANGE_QUERY_ID,
     FILTER_QUERY_ID,
     QUERY_ID,
     QueryError,
+    parse_associations,
+    query_associations,
     query_date_range,
     query_dataset_summary,
     query_filters,
@@ -109,12 +114,23 @@ def cmd_query(args) -> int:
     q3 = args.symbol is not None or args.series is not None
     q7 = args.source_file is not None or args.source_line_number is not None
     q4 = bool(args.field)
-    if sum(bool(mode) for mode in (q2, q3, q7, q4)) != 1:
+    q5 = args.identity is not None or args.instrument_symbol is not None or args.instrument_series is not None
+    if sum(bool(mode) for mode in (q2, q3, q7, q4, q5)) != 1:
         _print_json(
             {
                 "result": "fail",
                 "detail": "query requires exactly one of: symbol series (Q3), --from and --to (Q2), "
-                "--field NAME=VALUE (Q4), or --file and --line (Q7)",
+                "--field NAME=VALUE (Q4), --identity KEY / --instrument-symbol S --instrument-series SER (Q5), "
+                "or --file and --line (Q7)",
+            }
+        )
+        return 2
+    if q5 and (args.instrument_symbol is None) != (args.instrument_series is None):
+        _print_json(
+            {
+                "result": "fail",
+                "detail": "Q5 instrument selector requires both --instrument-symbol and --instrument-series "
+                "(an ordered pair; a single field is not a selector)",
             }
         )
         return 2
@@ -163,6 +179,25 @@ def cmd_query(args) -> int:
         elif q3:
             rows = query_instrument(handle, document, args.symbol, args.series, year=args.year)
             output = {"query": QUERY_ID, "result_count": len(rows), "rows": list(rows)}
+        elif q5:
+            documents = parse_associations(handle)
+            rows = query_associations(
+                handle,
+                document,
+                security_id=args.identity,
+                symbol=args.instrument_symbol,
+                series=args.instrument_series,
+                documents=documents,
+            )
+            output = {
+                "query": ASSOCIATIONS_QUERY_ID,
+                "security_id": args.identity,
+                "series": args.instrument_series,
+                "symbol": args.instrument_symbol,
+                "associations_present": documents is not None,
+                "record_count": len(rows),
+                "records": list(rows),
+            }
         else:
             output = query_record_detail(handle, document, args.source_file, args.source_line_number)
     except (baseline_mod.BaselineError, ServingIndexError) as exc:
@@ -263,7 +298,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_query = sub.add_parser(
         "query",
-        help="run the Q3 instrument query, the Q2 date-range query, the Q4 exact-value filter query, or the Q7 record detail",
+        help="run the Q3 instrument query, the Q2 date-range query, the Q4 exact-value filter query, the Q5 identity/association query, or the Q7 record detail",
     )
     add_common(p_query, state=True)
     p_query.add_argument("symbol", nargs="?", default=None)
@@ -303,6 +338,27 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Q7: the row's canonical source_line_number (D05 §8 field)",
+    )
+    p_query.add_argument(
+        "--identity",
+        dest="identity",
+        default=None,
+        metavar="KEY",
+        help="Q5: identity lookup by exact as-published security_id (the D05 §6.1 normalized-ISIN correlation key; not exchange-authoritative identity)",
+    )
+    p_query.add_argument(
+        "--instrument-symbol",
+        dest="instrument_symbol",
+        default=None,
+        metavar="SYMBOL",
+        help="Q5: the instrument's exact as-published listing_symbol (with --instrument-series)",
+    )
+    p_query.add_argument(
+        "--instrument-series",
+        dest="instrument_series",
+        default=None,
+        metavar="SERIES",
+        help="Q5: the instrument's exact as-published series (with --instrument-symbol)",
     )
     p_query.set_defaults(func=cmd_query)
 
