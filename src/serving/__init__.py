@@ -15,6 +15,11 @@ Boundary (D16-09, D23 §§8/10/11/12):
   the Q5 identity/association query (identity documents by the D05 §6.1
   correlation key and the instrument's dated-association intervals from the
   class-(2) W2 output; exact-value selectors only; no overlay aggregation),
+  the Q6 calendar query (class-(2) W2 calendar days as published — file
+  presence as the trading-session signal, sourced holiday labels, and the
+  unexplained / not-retrieved / not-applicable label states served exactly
+  as stored with the published calendar totals cross-checked; no label
+  states are filled in or invented),
   the Q9 archive inventory query
   (per-archive INPUT_MANIFEST + D01 facts with the explicit M2-only registry
   absence), the Q7 record-detail query (one canonical row plus its archive
@@ -77,13 +82,17 @@ from .qualification import (
 from .query import (
     ASSOCIATIONS_FILE,
     ASSOCIATIONS_QUERY_ID,
+    CALENDAR_FILE,
+    CALENDAR_QUERY_ID,
     DATE_RANGE_QUERY_ID,
     DATASET_QUERY_ID,
     QUERY_ID,
     QueryError,
     partitions_listing,
     parse_associations,
+    parse_calendar,
     query_associations,
+    query_calendar,
     query_date_range,
     query_dataset_summary,
     query_filters,
@@ -123,6 +132,8 @@ __all__ = [
     "DATE_RANGE_QUERY_ID",
     "ASSOCIATIONS_QUERY_ID",
     "ASSOCIATIONS_FILE",
+    "CALENDAR_QUERY_ID",
+    "CALENDAR_FILE",
     "QueryError",
     "partitions_listing",
     "query_instrument",
@@ -131,5 +142,7 @@ __all__ = [
     "query_filters",
     "query_associations",
     "parse_associations",
+    "query_calendar",
+    "parse_calendar",
     "rebuild_state",
 ]

@@ -36,6 +36,7 @@ from serving.query import (
     ASSOCIATIONS_FILE,
     DATE_RANGE_QUERY_ID,
     query_associations,
+    query_calendar,
     query_date_range,
     query_dataset_summary,
     query_instrument,
@@ -347,6 +348,48 @@ class M2RealPackageIntegrationTests(unittest.TestCase):
             self.assertNotIn(interval["series"], ("BL", "BO", "T0", "IT", "IL"))
         again = query_associations(self.handle, document, security_id=first_key)
         self.assertEqual(json.dumps(again, sort_keys=True), json.dumps(identity, sort_keys=True))
+
+    def test_q6_calendar_over_real_baseline(self):
+        # Q6 over the actual qualified M2 baseline: the W2 calendar is present
+        # and strictly ascending; the served calendar arithmetic matches the
+        # documented corpus facts (D03/D05 §3.4: 2,462 files + 147 missing
+        # weekdays = 2,609 span weekdays); the three documented unresolved
+        # dates are served unexplained (null label, cause never filled in);
+        # legacy-era present days carry trad_dt_eq_biz_dt null; the documented
+        # 2025-10-21 circular-holiday-with-file divergence is served as stored
+        # (file present AND official-holiday); the inclusive single-day range
+        # returns exactly that day; results are deterministic. Serving
+        # behavior only — no re-qualification.
+        document, _digest = load_index(self.state, self.handle)
+        days = query_calendar(self.handle, document)
+        self.assertGreater(len(days), 0)
+        dates = [d["trade_date"] for d in days]
+        self.assertEqual(dates, sorted(dates))
+        self.assertEqual(len(set(dates)), len(dates))  # strictly ascending, no duplicates
+        present = [d for d in days if d["file_present"]]
+        missing = [d for d in days if not d["file_present"]]
+        # D03 arithmetic as documented: 2,462 files + 147 gaps = 2,609 weekdays
+        self.assertEqual(len(present), 2462)
+        self.assertEqual(len(missing), 147)
+        self.assertEqual(len(days), 2609)
+        # the three documented unresolved dates (D05 §3.4 / D07-OPEN-8)
+        unexplained = [d for d in days if d["label_status"] == "unexplained-by-obtained-circulars"]
+        self.assertEqual([d["trade_date"] for d in unexplained], ["2024-11-20", "2025-10-20", "2026-01-15"])
+        for day in unexplained:
+            self.assertIsNone(day["official_holiday_label"])  # cause never filled in
+        # the documented divergence: 2025-10-21 circular holiday WITH a file
+        by_date = {d["trade_date"]: d for d in days}
+        divergence = by_date["2025-10-21"]
+        self.assertTrue(divergence["file_present"])
+        self.assertEqual(divergence["label_status"], "official-holiday")
+        # legacy-era present days are N/A for trad_dt_eq_biz_dt (never defaulted)
+        legacy_present = [d for d in present if d["trad_dt_eq_biz_dt"] is None]
+        self.assertGreater(len(legacy_present), 0)
+        # inclusive single-day range
+        single = query_calendar(self.handle, document, date_from="2024-11-20", date_to="2024-11-20")
+        self.assertEqual([d["trade_date"] for d in single], ["2024-11-20"])
+        again = query_calendar(self.handle, document)
+        self.assertEqual(json.dumps(again, sort_keys=True), json.dumps(days, sort_keys=True))
 
 
 if __name__ == "__main__":

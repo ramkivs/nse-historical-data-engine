@@ -14,8 +14,10 @@ Commands:
             query (--from --to), the Q4 exact-value filter query
             (--field NAME=VALUE, repeatable), the Q5 identity/association
             query (--identity KEY and/or --instrument-symbol S
-            --instrument-series SER), or the Q7 record-detail query
-            (--file --line); exactly one mode per invocation
+            --instrument-series SER), the Q6 calendar query (--calendar
+            with optional --from --to inclusive range), or the Q7
+            record-detail query (--file --line); exactly one mode per
+            invocation
   dataset   run the Q1 dataset/partition selection and yearly summaries
   quality   run the Q8 data-quality view (flag census, quarantine count,
             unresolved-state records, reconciliation aggregates, D21 absence)
@@ -44,12 +46,15 @@ from .qualification import query_qualification
 from .quality import query_data_quality
 from .query import (
     ASSOCIATIONS_QUERY_ID,
+    CALENDAR_QUERY_ID,
     DATE_RANGE_QUERY_ID,
     FILTER_QUERY_ID,
     QUERY_ID,
     QueryError,
     parse_associations,
+    parse_calendar,
     query_associations,
+    query_calendar,
     query_date_range,
     query_dataset_summary,
     query_filters,
@@ -115,13 +120,24 @@ def cmd_query(args) -> int:
     q7 = args.source_file is not None or args.source_line_number is not None
     q4 = bool(args.field)
     q5 = args.identity is not None or args.instrument_symbol is not None or args.instrument_series is not None
-    if sum(bool(mode) for mode in (q2, q3, q7, q4, q5)) != 1:
+    q6 = bool(args.calendar)
+    # with --calendar the --from/--to flags carry the Q6 range (not Q2)
+    q2 = (not q6) and q2
+    if sum(bool(mode) for mode in (q2, q3, q7, q4, q5, q6)) != 1:
         _print_json(
             {
                 "result": "fail",
                 "detail": "query requires exactly one of: symbol series (Q3), --from and --to (Q2), "
                 "--field NAME=VALUE (Q4), --identity KEY / --instrument-symbol S --instrument-series SER (Q5), "
-                "or --file and --line (Q7)",
+                "--calendar [with --from and --to] (Q6), or --file and --line (Q7)",
+            }
+        )
+        return 2
+    if q6 and (args.date_from is None) != (args.date_to is None):
+        _print_json(
+            {
+                "result": "fail",
+                "detail": "Q6 calendar range requires both --from and --to (inclusive ISO business dates)",
             }
         )
         return 2
@@ -167,6 +183,23 @@ def cmd_query(args) -> int:
                 "date_to": args.date_to,
                 "result_count": len(rows),
                 "rows": list(rows),
+            }
+        elif q6:
+            documents = parse_calendar(handle)
+            rows = query_calendar(
+                handle,
+                document,
+                date_from=args.date_from,
+                date_to=args.date_to,
+                documents=documents,
+            )
+            output = {
+                "query": CALENDAR_QUERY_ID,
+                "date_from": args.date_from,
+                "date_to": args.date_to,
+                "calendar_present": documents is not None,
+                "record_count": len(rows),
+                "records": list(rows),
             }
         elif q4:
             rows = query_filters(handle, document, filters)
@@ -317,14 +350,20 @@ def build_parser() -> argparse.ArgumentParser:
         dest="date_from",
         default=None,
         metavar="YYYY-MM-DD",
-        help="Q2: inclusive range start (ISO business date)",
+        help="Q2: inclusive range start; Q6: inclusive calendar range start (with --calendar; ISO business date, both bounds together)",
     )
     p_query.add_argument(
         "--to",
         dest="date_to",
         default=None,
         metavar="YYYY-MM-DD",
-        help="Q2: inclusive range end (ISO business date)",
+        help="Q2: inclusive range end; Q6: inclusive calendar range end (with --calendar; ISO business date, both bounds together)",
+    )
+    p_query.add_argument(
+        "--calendar",
+        dest="calendar",
+        action="store_true",
+        help="Q6: calendar query (trading days from file presence; sourced holiday labels; unexplained and not-retrieved states as published; optional --from/--to inclusive range)",
     )
     p_query.add_argument(
         "--file",

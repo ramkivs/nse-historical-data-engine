@@ -1,9 +1,9 @@
 """Serving query surface (D16-10) — the slice's query categories.
 
 Q1 dataset/partition selection + yearly summaries, Q2 date-range query, Q3
-instrument query, Q4 exact-value filters, and Q5 identity/association queries.
-Semantics of Q3, verified against the governing contract
-(D16-10 Q3; D05 §§3.1/5/6/8):
+instrument query, Q4 exact-value filters, Q5 identity/association queries,
+and Q6 calendar queries. Semantics of Q3, verified against the governing
+contract (D16-10 Q3; D05 §§3.1/5/6/8):
 
 * instrument = (listing_symbol, series) — dated attributes, never durable identity
   (D05 §3.1: "SYMBOL never durable"; 845 ISINs with multiple symbols); ISIN is a
@@ -40,12 +40,21 @@ DATASET_QUERY_ID = "Q1-dataset"
 DATE_RANGE_QUERY_ID = "Q2-date-range"
 FILTER_QUERY_ID = "Q4-filter"
 ASSOCIATIONS_QUERY_ID = "Q5-association"
+CALENDAR_QUERY_ID = "Q6-calendar"
 
 #: Q5's single source: the class-(2) W2 derived output the runner writes from the
 #: engine's identity stream (one SecurityIdentity document per line, in the engine's
 #: sorted normalized-ISIN key order). Already a recognized durability-class pattern
 #: in ``serving.baseline``; verified at open by verify-02/verify-03.
 ASSOCIATIONS_FILE = "w2/associations.jsonl"
+
+#: Q6's sources: the class-(2) W2 calendar (one CalendarDay document per line, in
+#: ascending trade_date order — the engine's derivation order) and the runner's
+#: metrics document (the calendar cross-check blocks). The runner always writes
+#: both; the durability-class patterns are already recognized in
+#: ``serving.baseline``; both are verified at open by verify-02/verify-03.
+CALENDAR_FILE = "w2/calendar.jsonl"
+METRICS_FILE = "w2/metrics.json"
 
 # ---------------------------------------------------------------------------
 # Pinned schema for Q5's source (D05 §3.2/§3.3; nse_engine.identity
@@ -105,6 +114,55 @@ INTERVAL_BASIS_OBSERVED_RANGE = "observed-range"  # D05 §3.3
 #: D05 §3.3: "Only the first exists today." master-snapshot / etf-register-membership
 #: are DEC-1-deferred; a document carrying either is a contract violation here.
 ASSOCIATION_TYPES_PRESENT = ("corpus-observed",)
+
+# ---------------------------------------------------------------------------
+# Pinned schema for Q6's source (D05 §3.4; nse_engine.calendar
+# ``CalendarDay.to_dict()``). Literals, with the contract citation (serving
+# does not import nse_engine, D24 boundary).
+CALENDAR_DAY_KEYS = frozenset(
+    (
+        "file_present",  # bool — the trading-session signal (D05 §3.4)
+        "formats_present",  # [format root] with a file on the date; [] for missing days
+        "label_circular",  # str|null — sourcing circular; only for official-holiday
+        "label_registry_id",  # str|null — circular-registry id; only for official-holiday
+        "label_status",  # one of CALENDAR_LABEL_STATUSES
+        "member_names",  # [member file name] on the date; [] for missing days
+        "missing_weekday",  # bool — true iff the weekday has no file
+        "notes",  # [governance annotation string] as published
+        "official_holiday_label",  # str|null — null for unexplained / not-retrieved
+        "trad_dt_eq_biz_dt",  # true (UDiff, corpus-proven) | null (legacy N/A / missing)
+        "trade_date",  # ISO date; weekday-only (D03: zero weekend files)
+        "weekday",  # weekday name, derived from the date
+    )
+)
+#: D05 §3.4 label states — exactly four; the three first are missing-day states,
+#: not-applicable is the present-day default (or a circular-holiday divergence).
+CALENDAR_LABEL_OFFICIAL_HOLIDAY = "official-holiday"
+CALENDAR_LABEL_UNEXPLAINED = "unexplained-by-obtained-circulars"
+CALENDAR_LABEL_NOT_RETRIEVED = "not-retrieved"
+CALENDAR_LABEL_NOT_APPLICABLE = "not-applicable"
+CALENDAR_LABEL_STATUSES = (
+    CALENDAR_LABEL_OFFICIAL_HOLIDAY,
+    CALENDAR_LABEL_UNEXPLAINED,
+    CALENDAR_LABEL_NOT_RETRIEVED,
+    CALENDAR_LABEL_NOT_APPLICABLE,
+)
+#: D03: the corpus has zero weekend files; the calendar covers weekdays only.
+CALENDAR_WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+#: w2/metrics.json calendar blocks (runner-derived published facts; served as
+#: published, cross-checked — never recomputed-and-replaced).
+CALENDAR_TOTALS_KEYS = frozenset(
+    (
+        "days",
+        "files",
+        "first_date",
+        "last_date",
+        "missing_weekdays",
+        "present_days",
+        "span_weekdays",
+        "unresolved_dates",
+    )
+)
 
 #: Q4's filterable fields, pinned by the D05 §3.1 field table (as-published
 #: values only; D05 NON-ASSUMPTION: descriptive attributes are never used for
@@ -638,6 +696,334 @@ def query_associations(
                 "source_line_number": line_number,
             }
             results.append(served)
+    return tuple(results)
+
+
+def _require_nonempty_str(value: object, context: str, field: str) -> None:
+    # The engine emits null or a non-empty string in these fields; a blank string
+    # is not a published value (D05 §2 rule 3: blank and absent are distinct — and
+    # neither is ever produced blank here), so it is corruption.
+    if not isinstance(value, str) or not value:
+        raise QueryError(
+            "calendar-scan", "%s must be null or a non-empty string, got %r in %s" % (field, value, context)
+        )
+
+
+def _validate_calendar_day(doc: object, context: str) -> None:
+    if not isinstance(doc, dict) or set(doc) != CALENDAR_DAY_KEYS:
+        raise QueryError("calendar-scan", "calendar day with a non-contract key set in %s" % context)
+    _require_iso_date_in_scan(doc.get("trade_date"), "%s.trade_date" % context)
+    date = datetime.date.fromisoformat(doc["trade_date"])
+    if date.weekday() > 4:
+        raise QueryError(
+            "calendar-scan",
+            "weekend date %r in %s (D03: the corpus has zero weekend files; the calendar covers weekdays only)"
+            % (doc["trade_date"], context),
+        )
+    if doc.get("weekday") != CALENDAR_WEEKDAY_NAMES[date.weekday()]:
+        raise QueryError(
+            "calendar-scan",
+            "weekday %r is inconsistent with the date %r in %s" % (doc.get("weekday"), doc["trade_date"], context),
+        )
+    file_present = doc.get("file_present")
+    if not isinstance(file_present, bool):
+        raise QueryError("calendar-scan", "file_present must be a boolean in %s" % context)
+    missing_weekday = doc.get("missing_weekday")
+    if not isinstance(missing_weekday, bool):
+        raise QueryError("calendar-scan", "missing_weekday must be a boolean in %s" % context)
+    if missing_weekday != (not file_present):
+        raise QueryError(
+            "calendar-scan",
+            "missing_weekday %r contradicts file_present %r in %s" % (missing_weekday, file_present, context),
+        )
+    label_status = doc.get("label_status")
+    if label_status not in CALENDAR_LABEL_STATUSES:
+        raise QueryError(
+            "calendar-scan",
+            "label_status %r outside the governed states %s in %s"
+            % (label_status, "/".join(CALENDAR_LABEL_STATUSES), context),
+        )
+    official_holiday_label = doc.get("official_holiday_label")
+    label_circular = doc.get("label_circular")
+    label_registry_id = doc.get("label_registry_id")
+    if label_status == CALENDAR_LABEL_OFFICIAL_HOLIDAY:
+        _require_nonempty_str(official_holiday_label, context, "official_holiday_label")
+        for field, value in (("label_circular", label_circular), ("label_registry_id", label_registry_id)):
+            if value is not None:
+                _require_nonempty_str(value, context, field)
+    else:
+        if official_holiday_label is not None:
+            raise QueryError(
+                "calendar-scan",
+                "label_status %r must carry official_holiday_label null (the cause is never filled in) in %s"
+                % (label_status, context),
+            )
+        if label_circular is not None or label_registry_id is not None:
+            raise QueryError(
+                "calendar-scan",
+                "label_circular/label_registry_id are populated only for %s in %s"
+                % (CALENDAR_LABEL_OFFICIAL_HOLIDAY, context),
+            )
+    if label_status == CALENDAR_LABEL_NOT_APPLICABLE and not file_present:
+        raise QueryError(
+            "calendar-scan",
+            "label_status %r occurs only on file-present days in %s" % (CALENDAR_LABEL_NOT_APPLICABLE, context),
+        )
+    for field in ("formats_present", "member_names", "notes"):
+        values = doc.get(field)
+        if not isinstance(values, list) or any(not isinstance(item, str) or not item for item in values):
+            raise QueryError("calendar-scan", "%s must be a list of non-empty strings in %s" % (field, context))
+    if file_present:
+        if not doc["formats_present"] or not doc["member_names"]:
+            raise QueryError(
+                "calendar-scan",
+                "a file-present day must list its formats_present and member_names in %s" % context,
+            )
+    else:
+        if doc["formats_present"] or doc["member_names"]:
+            raise QueryError(
+                "calendar-scan",
+                "a missing weekday must carry empty formats_present and member_names in %s" % context,
+            )
+    trad_dt_eq_biz_dt = doc.get("trad_dt_eq_biz_dt")
+    if trad_dt_eq_biz_dt not in (True, None):
+        raise QueryError(
+            "calendar-scan",
+            "trad_dt_eq_biz_dt must be true (UDiff, corpus-proven) or null (never defaulted) in %s" % context,
+        )
+    if trad_dt_eq_biz_dt is True and not file_present:
+        raise QueryError("calendar-scan", "trad_dt_eq_biz_dt true on a missing weekday in %s" % context)
+
+
+def parse_calendar(baseline: Baseline) -> Optional[list]:
+    """Parse ``w2/calendar.jsonl`` (class-(2) W2 output) or report it absent.
+
+    Returns ``None`` when the file (and its runner-emitted pair
+    ``w2/metrics.json``) is absent — a legitimate class-(2)-absent state
+    (served as explicitly absent, never fabricated, never an error). Returns
+    a list of ``(line_number, document)`` pairs in file order when present.
+    A **present** file that is malformed fails closed with
+    ``QueryError("calendar-scan")`` — including a non-object line, a
+    non-contract key set, a weekend date, a weekday/date mismatch, a
+    missing-weekday/file-present contradiction, a foreign label status, a
+    label populated on an unexplained/not-retrieved day, blank label values,
+    an empty file, or duplicate / non-ascending ``trade_date`` (the engine
+    derives strictly ascending weekday spans). Read-only: the file is
+    streamed and nothing is written.
+    """
+    path = baseline.path(CALENDAR_FILE)
+    if not os.path.exists(path):
+        if os.path.exists(baseline.path(METRICS_FILE)):
+            raise QueryError(
+                "calendar-metrics",
+                "%s present without %s: the runner writes both (incomplete W2 output)" % (METRICS_FILE, CALENDAR_FILE),
+            )
+        return None
+    documents = []
+    previous_date = None
+    with open(path, "r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            context = "%s line %d" % (CALENDAR_FILE, line_number)
+            try:
+                doc = json.loads(line)
+            except ValueError as exc:
+                raise QueryError("calendar-scan", "unparseable calendar day in %s: %s" % (context, exc))
+            _validate_calendar_day(doc, context)
+            trade_date = doc["trade_date"]
+            if previous_date is not None and trade_date <= previous_date:
+                raise QueryError(
+                    "calendar-scan",
+                    "trade_date %r is not strictly ascending after %r in %s (the engine derives a strictly "
+                    "ascending weekday span; a duplicate or reorder is corruption)"
+                    % (trade_date, previous_date, context),
+                )
+            previous_date = trade_date
+            documents.append((line_number, doc))
+    if not documents:
+        raise QueryError(
+            "calendar-scan",
+            "an empty %s is not a state the engine can produce (a corpus has at least one file)" % CALENDAR_FILE,
+        )
+    return documents
+
+
+def _load_calendar_metrics(baseline: Baseline) -> dict:
+    """Load the Q6 cross-check blocks from ``w2/metrics.json`` (published,
+    runner-derived facts). Fails closed with ``QueryError("calendar-metrics")``
+    when the file is absent while the calendar is present (the runner writes
+    both) or its calendar blocks are missing/non-contract."""
+    path = baseline.path(METRICS_FILE)
+    if not os.path.exists(path):
+        raise QueryError(
+            "calendar-metrics",
+            "%s present without %s: the runner writes both (incomplete W2 output)" % (CALENDAR_FILE, METRICS_FILE),
+        )
+    with open(path, "r", encoding="utf-8") as handle:
+        try:
+            metrics = json.load(handle)
+        except ValueError as exc:
+            raise QueryError("calendar-metrics", "unparseable %s: %s" % (METRICS_FILE, exc))
+    if not isinstance(metrics, dict):
+        raise QueryError("calendar-metrics", "%s must be a JSON document" % METRICS_FILE)
+    totals = metrics.get("calendar_totals")
+    if not isinstance(totals, dict) or set(totals) != CALENDAR_TOTALS_KEYS:
+        raise QueryError(
+            "calendar-metrics", "%s without its governed calendar_totals block" % METRICS_FILE
+        )
+    label_status_counts = metrics.get("label_status_counts")
+    if not isinstance(label_status_counts, dict) or any(
+        not isinstance(status, str) or not isinstance(count, int) or isinstance(count, bool) or count < 0
+        for status, count in label_status_counts.items()
+    ):
+        raise QueryError(
+            "calendar-metrics", "%s without a governed label_status_counts block" % METRICS_FILE
+        )
+    return {"totals": totals, "label_status_counts": label_status_counts}
+
+
+def _cross_check_calendar(documents: list, metrics: dict) -> None:
+    """Validate the published calendar blocks against the served records.
+
+    The published values are what the package declares (never recomputed and
+    replaced); a material contradiction is a package inconsistency and fails
+    closed (Q8 reconciliation cross-check precedent). Checks: the D03
+    arithmetic (span weekdays = present + missing; files = present days, or
+    greater where a day carries several members), the span bounds, the
+    unresolved-date list, and the label-status census.
+    """
+    days = [doc for _line, doc in documents]
+    totals = metrics["totals"]
+    present = sum(1 for day in days if day["file_present"])
+    missing = len(days) - present
+    for field, expected in (
+        ("days", len(days)),
+        ("span_weekdays", len(days)),
+        ("present_days", present),
+        ("missing_weekdays", missing),
+        ("first_date", days[0]["trade_date"]),
+        ("last_date", days[-1]["trade_date"]),
+    ):
+        if totals.get(field) != expected:
+            raise QueryError(
+                "calendar-metrics",
+                "published calendar_totals.%s %r contradicts the served calendar records (%r)"
+                % (field, totals.get(field), expected),
+            )
+    unresolved = [day["trade_date"] for day in days if day["label_status"] == CALENDAR_LABEL_UNEXPLAINED]
+    if totals.get("unresolved_dates") != unresolved:
+        raise QueryError(
+            "calendar-metrics",
+            "published calendar_totals.unresolved_dates %r contradicts the served records (%r)"
+            % (totals.get("unresolved_dates"), unresolved),
+        )
+    files = totals.get("files")
+    if not isinstance(files, int) or isinstance(files, bool) or files < present:
+        raise QueryError(
+            "calendar-metrics",
+            "published calendar_totals.files %r violates the D03 arithmetic (files >= present days %d)" % (files, present),
+        )
+    if files != present and not any(len(day["member_names"]) > 1 for day in days):
+        raise QueryError(
+            "calendar-metrics",
+            "published calendar_totals.files %r exceeds the %d present days without a multi-member day"
+            % (files, present),
+        )
+    counts = {}
+    for day in days:
+        counts[day["label_status"]] = counts.get(day["label_status"], 0) + 1
+    if metrics["label_status_counts"] != counts:
+        raise QueryError(
+            "calendar-metrics",
+            "published label_status_counts %r contradicts the served records (%r)"
+            % (metrics["label_status_counts"], counts),
+        )
+
+
+def query_calendar(
+    baseline: Baseline,
+    index: dict,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    documents: object = _UNPARSE,
+    metrics: object = _UNPARSE,
+) -> Tuple[dict, ...]:
+    """Q6 calendar query (D16-10 Q6: "trading days from file-presence;
+    sourced holiday labels; the three unexplained dates shown as
+    unexplained-by-obtained-circulars; legacy era not-retrieved").
+
+    Read-only serving of ``w2/calendar.jsonl`` (the class-(2) W2 output;
+    D05 §3.4), with the ``w2/metrics.json`` calendar blocks cross-checked
+    against the served records:
+
+    * **full** — no bounds: every calendar day as published, in file order
+      (the engine's strictly ascending ``trade_date`` order — never
+      re-sorted);
+    * **range** — ``date_from`` and ``date_to`` (both, inclusive, ISO
+      YYYY-MM-DD, exact as-published string comparison — Q2 semantics):
+      the days with ``date_from <= trade_date <= date_to``; ``date_from >
+      date_to`` is an empty range → empty result, not an error.
+
+    Display semantics, per the governing contract (D05 §3.4; D16-10 Q6;
+    D23 §8 item 1):
+
+    * the four ``label_status`` states are served exactly as published and
+      kept distinct: a sourced ``official-holiday`` carries its
+      ``official_holiday_label`` / ``label_circular`` / ``label_registry_id``;
+      ``unexplained-by-obtained-circulars`` and ``not-retrieved`` keep
+      ``official_holiday_label: null`` — the cause is **never filled in**,
+      never defaulted, never inferred from the status or the date;
+    * ``trad_dt_eq_biz_dt: null`` (legacy N/A / missing) served as null,
+      never defaulted to false;
+    * ``notes`` served as published text, never reinterpreted;
+    * the file-presence/circular divergence (a present day labelled
+      official-holiday) is served as stored — the calendar stores the
+      divergence, it does not reconcile it.
+
+    Absence and failure (D16-08: serving never fabricates class-(2)
+    content): both W2 calendar files absent → a legitimate empty result
+    (served with ``calendar_present`` at the CLI level); a present
+    malformed file or a metrics/records contradiction fails closed before
+    anything is served (no partial output). ``index`` is accepted for
+    boundary consistency (every Q path takes the verified class-(4) index)
+    but supplies no Q6 file narrowing — the file set is fixed and the index
+    format is unchanged. ``documents`` / ``metrics`` may carry results
+    already returned by :func:`parse_calendar` (and the metrics loader) so
+    the CLI serves the ``calendar_present`` marker from the same single
+    pass. Read-only: the files are streamed and nothing is written.
+    """
+    if date_from is not None:
+        _validate_iso_date("date_from", date_from)
+    if date_to is not None:
+        _validate_iso_date("date_to", date_to)
+    if (date_from is None) != (date_to is None):
+        raise QueryError(
+            "query-input", "the Q6 calendar range requires both date_from and date_to (inclusive ISO business dates)"
+        )
+    if date_from is not None and date_from > date_to:
+        return ()
+    if documents is _UNPARSE:
+        documents = parse_calendar(baseline)
+    if documents is None:
+        return ()
+    if metrics is _UNPARSE:
+        metrics = _load_calendar_metrics(baseline)
+    _cross_check_calendar(documents, metrics)
+
+    results = []
+    for line_number, doc in documents:
+        if date_from is not None and not (date_from <= doc["trade_date"] <= date_to):
+            continue
+        served = dict(doc)
+        served["serving"] = {
+            "query": CALENDAR_QUERY_ID,
+            "date_from": date_from,
+            "date_to": date_to,
+            "source_file": CALENDAR_FILE,
+            "source_line_number": line_number,
+        }
+        results.append(served)
     return tuple(results)
 
 
