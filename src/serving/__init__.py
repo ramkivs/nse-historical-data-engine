@@ -10,10 +10,11 @@ Boundary (D16-09, D23 §§8/10/11/12):
 * serving state is durable class (4) — always a pure derivation of the baseline,
   rebuildable at any time; deleting it is never a data event (D16-07);
 * this slice implements the Q1 dataset/partition summaries, the Q2 date-range
-  query, the Q3 instrument query (D16-10), and the Q9 archive inventory query
+  query, the Q3 instrument query (D16-10), the Q9 archive inventory query
   (per-archive INPUT_MANIFEST + D01 facts with the explicit M2-only registry
-  absence), each with row-level D05 §8 provenance where rows are served, over a
-  deterministic, rebuildable read model.
+  absence), and the Q7 record-detail query (one canonical row plus its
+  archive and reconciliation facts), each with row-level D05 §8 provenance
+  where rows are served, over a deterministic, rebuildable read model.
 
 Technology (D23 §13 delegated selection, recorded in the D24 implementation record):
 Python 3 standard library only; a plain canonical-JSON index file on local disk;
@@ -46,7 +47,13 @@ from .archive import (
     D01_INVENTORY_SHA256,
     D01InventoryError,
     load_d01_inventory,
+    parse_input_manifest,
     query_archive_inventory,
+)
+from .detail import (
+    RECORD_DETAIL_QUERY_ID,
+    parse_reconciliation,
+    query_record_detail,
 )
 from .query import (
     DATE_RANGE_QUERY_ID,
@@ -67,7 +74,11 @@ __all__ = [
     "D01_INVENTORY_SHA256",
     "D01InventoryError",
     "load_d01_inventory",
+    "parse_input_manifest",
     "query_archive_inventory",
+    "RECORD_DETAIL_QUERY_ID",
+    "parse_reconciliation",
+    "query_record_detail",
     "Baseline",
     "BaselineError",
     "BaselineSpec",

@@ -44,7 +44,7 @@ UDIFF_HEADER = (
     "TtlTrfVal,TtlNbOfTxsExctd,SsnId,NewBrdLotQty,Rmks,Rsvd1,Rsvd2,Rsvd3,Rsvd4"
 )
 
-#: member_name -> (family, year, expected_source_date, body lines)
+#: member_name -> (family, year, expected_source_date, body lines, expected canonical rows)
 MEMBERS: Dict[str, Tuple[str, str, str, List[str]]] = {
     "fix-leg-2016-01-04.csv": (
         contract.FAMILY_LEGACY,
@@ -55,6 +55,7 @@ MEMBERS: Dict[str, Tuple[str, str, str, List[str]]] = {
             "TCS,EQ,3500.00,3560.00,3480.00,3545.00,3540.00,3500.00,450000,1596250000.00,04-JAN-2016,3200,INE467B01024",
             "WIPRO,EQ,1200.00,1230.00,1195.00,1225.00,1220.00,1200.00,80000,98000000.00,04-JAN-2016,1500,",
         ],
+        3,
     ),
     "fix-leg-2016-01-05.csv": (
         contract.FAMILY_LEGACY,
@@ -64,6 +65,7 @@ MEMBERS: Dict[str, Tuple[str, str, str, List[str]]] = {
             "RELIANCE,EQ,1040.00,1060.00,1030.00,1055.00,1050.00,1039.50,1300000,1371500000.00,05-JAN-2016,9100,INE002A01017",
             "TCS,EQ,3545.00,3600.00,3530.00,3590.00,3585.00,3540.00,480000,1719600000.00,05-JAN-2016,3400,INE467B01024",
         ],
+        2,
     ),
     "fix-leg-2017-02-06.csv": (
         contract.FAMILY_LEGACY,
@@ -73,6 +75,7 @@ MEMBERS: Dict[str, Tuple[str, str, str, List[str]]] = {
             "RELIANCE,EQ,2500.00,2540.00,2480.00,2535.00,2530.00,2500.00,900000,2281500000.00,06-FEB-2017,7600,INE002A01017",
             "INFY,EQ,1100.00,1120.00,1090.00,1115.00,1110.00,1100.00,250000,278750000.00,06-FEB-2017,2100,INE009A01021",
         ],
+        2,
     ),
     "fix-udf-2024-03-05.csv": (
         contract.FAMILY_UDIFF,
@@ -86,6 +89,7 @@ MEMBERS: Dict[str, Tuple[str, str, str, List[str]]] = {
             "TATA CONSULTANCY SERVICES LTD,3560.00,3610.00,3550.00,3600.00,3595.00,3555.00,,"
             "3605.00,,,470000,1693850000.00,3350,F1,10,,,,,",
         ],
+        2,
     ),
 }
 
@@ -95,7 +99,7 @@ EXPECTED_PARTITIONS = 3
 
 
 def _member_bytes(member_name: str) -> bytes:
-    family, _year, _date, lines = MEMBERS[member_name]
+    family, _year, _date, lines, _expected_rows = MEMBERS[member_name]
     header = LEGACY_HEADER if family == contract.FAMILY_LEGACY else UDIFF_HEADER
     # CRLF endings, like the real bhavcopy members (raw bytes preserved; the engine
     # records both raw and LF-normalized hashes per D05 §9.2).
@@ -116,6 +120,38 @@ def _module_sha256() -> str:
         return hashlib.sha256(handle.read()).hexdigest()
 
 
+def _reconciliation_record(root: str, member_name: str, expected_date: str, check: str, expected, observed, note: str) -> dict:
+    """One fixture reconciliation record in the runner's shared 14-field schema
+    (tools/i4_runner/i4_reconcile.make_record is authoritative). Tier E:
+    evidence-only, non-gating, member-scoped — the fixture has no governed
+    counterpart, and the record says exactly that. The scope mirrors
+    i4_reconcile.member_scope with the fixture's own identity values.
+    """
+    match = expected == observed
+    return {
+        "tier": "E",
+        "tier_description": "evidence-only observation (non-gating; no governing counterpart)",
+        "check": check,
+        "input_identity": {
+            "scope": "member",
+            "root": root,
+            "relative_path": member_name,
+            "file_name": member_name,
+            "member_name": member_name,
+            "date_from_filename": expected_date,
+        },
+        "comparison_basis": "d24 synthetic fixture (never the M2 corpus)",
+        "governing_definition": "fixture-declared expected value (synthetic; no governed counterpart)",
+        "expected": expected,
+        "observed": observed,
+        "delta": (observed - expected) if match else None,
+        "result": "match" if match else "divergence",
+        "disposition": "non-gating",
+        "unresolved_state": None,
+        "note": note,
+    }
+
+
 def build_fixture_package(out_dir: str) -> dict:
     """Build the fixture package into ``out_dir`` (created if absent).
 
@@ -134,7 +170,7 @@ def build_fixture_package(out_dir: str) -> dict:
     partition_files: Dict[str, List[str]] = {}
     rows_total = 0
     for sequence, member_name in enumerate(sorted(MEMBERS), start=1):
-        family, year, expected_date, _lines = MEMBERS[member_name]
+        family, year, expected_date, lines, expected_rows = MEMBERS[member_name]
         data = _member_bytes(member_name)
         source = SourceDescriptor(
             source_archive=member_name,
@@ -184,16 +220,40 @@ def build_fixture_package(out_dir: str) -> dict:
         }
         input_manifest_records.append(manifest_record)
         input_manifest_lines.append(canonical_json(manifest_record) + "\n")
-        reconciliation_lines.append(
-            canonical_json(
-                {
-                    "member_name": member_name,
-                    "result": "match",
-                    "detail": "d24 fixture: no divergence (synthetic)",
-                }
-            )
-            + "\n"
-        )
+        # Runner-schema reconciliation records (see _reconciliation_record). The
+        # fixture declares expected values (its own construction intent) and
+        # corroborates them against the engine's observation — honest Tier E
+        # evidence-only records, never a claim of governed checks. The udiff
+        # member (sequence == EXPECTED_MEMBERS) deliberately carries NO
+        # reconciliation records: an archive with none is a valid state.
+        if len(build.rows) != expected_rows:
+            raise AssertionError("fixture member row count diverged from its declaration: %s" % member_name)
+        if sequence < EXPECTED_MEMBERS:
+            reconciliation_records = [
+                _reconciliation_record(
+                    root,
+                    member_name,
+                    expected_date,
+                    "fixture_row_count_corroboration",
+                    expected_rows,
+                    len(build.rows),
+                    "d24 fixture: no divergence (synthetic)",
+                )
+            ]
+            if sequence == 1:
+                reconciliation_records.append(
+                    _reconciliation_record(
+                        root,
+                        member_name,
+                        expected_date,
+                        "fixture_quarantine_census",
+                        0,
+                        len(build.quarantined),
+                        "d24 fixture: no quarantined rows (synthetic)",
+                    )
+                )
+            for record in reconciliation_records:
+                reconciliation_lines.append(canonical_json(record) + "\n")
 
     _write_text(out_dir, "INPUT_MANIFEST.jsonl", "".join(input_manifest_lines))
 
@@ -341,7 +401,7 @@ def build_fixture_package(out_dir: str) -> dict:
                 "package_manifest_sha256": manifest_digest,
                 "partitions": EXPECTED_PARTITIONS,
                 "quarantined": 0,
-                "reconciliation": {"by_result": {"match": EXPECTED_MEMBERS}},
+                "reconciliation": {"by_result": {"match": len(reconciliation_lines)}},
                 "rows": rows_total,
                 "run_id": FIXTURE_RUN_ID,
                 "status": "complete",

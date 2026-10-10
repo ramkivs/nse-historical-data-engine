@@ -27,6 +27,7 @@ import unittest
 from tests import support
 from serving.archive import load_d01_inventory, query_archive_inventory
 from serving.baseline import DEFAULT_M2_SPEC, BaselineError, open_baseline
+from serving.detail import query_record_detail
 from serving.index import build_index, load_index, write_index
 from serving.query import DATE_RANGE_QUERY_ID, query_date_range, query_dataset_summary, query_instrument
 from serving.rebuild import rebuild_state
@@ -181,6 +182,33 @@ class M2RealPackageIntegrationTests(unittest.TestCase):
             self.assertEqual(archive["registry"], {"present": False, "status": "absent-in-m2-only-release"})
         again = query_archive_inventory(self.handle, d01=d01)
         self.assertEqual(json.dumps(again, sort_keys=True), json.dumps(result, sort_keys=True))
+
+    def test_q7_record_detail_over_real_baseline(self):
+        # Q7 over the actual qualified M2 baseline: the row-to-archive join
+        # succeeds on authoritative package data, the archive facts and the
+        # member-scoped reconciliation records are attached as published,
+        # raw_line stays excluded, and the output is deterministic.
+        document, _digest = load_index(self.state, self.handle)
+        rows = query_instrument(self.handle, document, "RELIANCE", "EQ")
+        self.assertGreater(len(rows), 0)
+        row = rows[0]
+        source_file = row["serving"]["source_file"]
+        line_number = row["source_line_number"]
+        detail = query_record_detail(self.handle, document, source_file, line_number)
+        self.assertEqual(detail["row"]["provenance"], row["provenance"])
+        self.assertEqual(detail["row"]["source_line_number"], line_number)
+        self.assertNotIn("raw_line", detail["row"])
+        archive = detail["archive"]
+        self.assertEqual(archive["member_name"], row["provenance"]["member_name"])
+        self.assertEqual(archive["file_name"], row["provenance"]["source_archive"])
+        self.assertEqual(archive["archive_sha256_d01"], row["provenance"]["archive_sha256"])
+        self.assertEqual(archive["engine_family"], row["format_family"])
+        self.assertGreater(len(detail["reconciliation"]), 0)
+        for record in detail["reconciliation"]:
+            self.assertEqual(record["input_identity"]["scope"], "member")
+            self.assertEqual(record["input_identity"]["relative_path"], archive["relative_path"])
+        again = query_record_detail(self.handle, document, source_file, line_number)
+        self.assertEqual(json.dumps(again, sort_keys=True), json.dumps(detail, sort_keys=True))
 
 
 if __name__ == "__main__":

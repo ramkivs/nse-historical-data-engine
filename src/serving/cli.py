@@ -10,8 +10,9 @@ baseline package; the only writes are to the caller-supplied ``--state`` directo
 Commands:
   verify    verify a package against its manifests (and, with --m2, the pinned M2 pin)
   build     build the class-(4) index from the verified baseline into --state
-  query     run the Q3 instrument query (symbol series) or the Q2 date-range
-            query (--from --to); exactly one mode per invocation
+  query     run the Q3 instrument query (symbol series), the Q2 date-range
+            query (--from --to), or the Q7 record-detail query
+            (--file --line); exactly one mode per invocation
   dataset   run the Q1 dataset/partition selection and yearly summaries
   inventory run the Q9 archive inventory (per-archive INPUT_MANIFEST + D01
             facts; no --state/index dependency)
@@ -30,6 +31,7 @@ import sys
 
 from . import baseline as baseline_mod
 from .archive import D01InventoryError, load_d01_inventory, query_archive_inventory
+from .detail import query_record_detail
 from .index import index_state, load_index, write_index, build_index, ServingIndexError
 from .query import (
     DATE_RANGE_QUERY_ID,
@@ -96,10 +98,18 @@ def cmd_build(args) -> int:
 def cmd_query(args) -> int:
     q2 = args.date_from is not None or args.date_to is not None
     q3 = args.symbol is not None or args.series is not None
-    if q2 == q3:
+    q7 = args.source_file is not None or args.source_line_number is not None
+    if sum(bool(mode) for mode in (q2, q3, q7)) != 1:
         _print_json(
-            {"result": "fail", "detail": "query requires exactly one of: symbol series (Q3) or --from and --to (Q2)"}
+            {
+                "result": "fail",
+                "detail": "query requires exactly one of: symbol series (Q3), --from and --to (Q2), "
+                "or --file and --line (Q7)",
+            }
         )
+        return 2
+    if q7 and (args.source_file is None or args.source_line_number is None):
+        _print_json({"result": "fail", "detail": "Q7 record detail requires both --file and --line"})
         return 2
     if q2 and (args.date_from is None or args.date_to is None):
         _print_json({"result": "fail", "detail": "Q2 date-range query requires both --from and --to"})
@@ -119,9 +129,11 @@ def cmd_query(args) -> int:
                 "result_count": len(rows),
                 "rows": list(rows),
             }
-        else:
+        elif q3:
             rows = query_instrument(handle, document, args.symbol, args.series, year=args.year)
             output = {"query": QUERY_ID, "result_count": len(rows), "rows": list(rows)}
+        else:
+            output = query_record_detail(handle, document, args.source_file, args.source_line_number)
     except (baseline_mod.BaselineError, ServingIndexError) as exc:
         _print_json({"result": "fail", "detail": str(exc)})
         return 3
@@ -213,6 +225,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="YYYY-MM-DD",
         help="Q2: inclusive range end (ISO business date)",
+    )
+    p_query.add_argument(
+        "--file",
+        dest="source_file",
+        default=None,
+        help="Q7: row file, exactly as served in a Q2/Q3 result (serving.source_file)",
+    )
+    p_query.add_argument(
+        "--line",
+        dest="source_line_number",
+        type=int,
+        default=None,
+        help="Q7: the row's canonical source_line_number (D05 §8 field)",
     )
     p_query.set_defaults(func=cmd_query)
 

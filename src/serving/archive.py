@@ -104,8 +104,13 @@ class D01InventoryError(Exception):
         self.detail = detail
 
 
-def _parse_input_manifest(baseline: Baseline) -> list:
-    """Parse the package's INPUT_MANIFEST.jsonl (as-published; fail closed)."""
+def parse_input_manifest(baseline: Baseline) -> list:
+    """Parse the package's INPUT_MANIFEST.jsonl (as-published; fail closed).
+
+    Public (not Q9-private): the Q7 record-detail slice reuses this parser and
+    its contract checks — there is one INPUT_MANIFEST parser in the serving
+    layer, not one per query.
+    """
     records = []
     with open(baseline.path(INPUT_MANIFEST), "r", encoding="utf-8") as handle:
         for line_number, line in enumerate(handle, start=1):
@@ -203,7 +208,7 @@ def query_archive_inventory(baseline: Baseline, d01: Optional[dict] = None) -> d
     Read-only with respect to the package: only the two metadata files are
     opened; no canonical row file or source archive byte is read.
     """
-    records = _parse_input_manifest(baseline)
+    records = parse_input_manifest(baseline)
     governed = _parse_governed_inputs(baseline)
     published_count = governed["corpus"]["archive_count"]
     if len(records) != published_count:
