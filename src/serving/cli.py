@@ -27,9 +27,15 @@ Commands:
             facts; no --state/index dependency)
   rebuild   delete and rebuild the class-(4) state (delegated operation (b))
   info      print a diagnostic summary of the serving state
+  saved     manage the saved-query store (class-(4) user state in a DISTINCT
+            root outside the derived-state rebuild scope — D37-DEC C1(a)):
+            save / show / list / update / delete, and `saved run` (loads a saved
+            definition and execute it through the existing query modes; a run
+            never mutates the store — C2(a))
 
 Exit codes: 0 = ok; 2 = usage/verification/query failure (fail closed); 3 =
-index/stale failure. No partial results are printed on failure.
+index/stale/saved-store state failure. No partial results are printed on
+failure.
 """
 
 from __future__ import annotations
@@ -61,6 +67,16 @@ from .query import (
     query_instrument,
 )
 from .rebuild import rebuild_state
+from .saved import (
+    SavedQueryError,
+    create_saved,
+    delete_saved,
+    execute_saved,
+    get_saved,
+    list_saved,
+    update_saved,
+    validate_saved_definition,
+)
 
 
 def _print_json(obj) -> None:
@@ -243,6 +259,146 @@ def cmd_query(args) -> int:
     return 0
 
 
+def _saved_exit_code(exc: SavedQueryError) -> int:
+    """3 for store-state failures (missing/corrupt/format/schema/conflict);
+    2 for usage-level failures (invalid definition, duplicate, not-found)."""
+    state_checks = (
+        "saved-query-missing",
+        "saved-query-corrupt",
+        "saved-query-format",
+        "saved-query-schema",
+        "saved-query-conflict",
+    )
+    return 3 if exc.check in state_checks else 2
+
+
+def _saved_param_flags(args) -> dict:
+    """Map the saved-query CLI flags to the mode's exact parameter names.
+
+    Absent flags are simply not persisted (absent != null != blank — the
+    contract rejects null/blank values). Q3 uses --symbol/--series; Q5 uses
+    --instrument-symbol/--instrument-series; both cannot be given in one
+    definition (the parameter name would be ambiguous).
+    """
+    if args.symbol is not None and args.instrument_symbol is not None:
+        raise SavedQueryError(
+            "saved-query-invalid",
+            "--symbol (Q3) and --instrument-symbol (Q5) are mutually exclusive in one definition",
+        )
+    if args.series is not None and args.instrument_series is not None:
+        raise SavedQueryError(
+            "saved-query-invalid",
+            "--series (Q3) and --instrument-series (Q5) are mutually exclusive in one definition",
+        )
+    params = {}
+    if args.family is not None:
+        params["family"] = args.family
+    if args.date_from is not None:
+        params["date_from"] = args.date_from
+    if args.date_to is not None:
+        params["date_to"] = args.date_to
+    if args.symbol is not None:
+        params["symbol"] = args.symbol
+    if args.series is not None:
+        params["series"] = args.series
+    if args.year is not None:
+        params["year"] = args.year
+    if args.identity is not None:
+        params["security_id"] = args.identity
+    if args.instrument_symbol is not None:
+        params["symbol"] = args.instrument_symbol
+    if args.instrument_series is not None:
+        params["series"] = args.instrument_series
+    if args.source_file is not None:
+        params["source_file"] = args.source_file
+    if args.source_line_number is not None:
+        params["source_line_number"] = args.source_line_number
+    if args.repo is not None:
+        params["repo"] = args.repo
+    if args.field:
+        filters = {}
+        for item in args.field:
+            name, sep, value = item.partition("=")
+            if not sep or not name or not value:
+                raise SavedQueryError("saved-query-invalid", "Q4 --field requires NAME=VALUE, got %r" % item)
+            if name in filters:
+                raise SavedQueryError(
+                    "saved-query-invalid", "Q4 allows exactly one value per field; duplicate filter for %r" % name
+                )
+            filters[name] = value
+        params["filters"] = filters
+    return params
+
+
+def cmd_saved_save(args) -> int:
+    try:
+        params = validate_saved_definition(args.mode, _saved_param_flags(args))
+        record, digest = create_saved(args.saved_state, args.id, args.mode, params)
+    except SavedQueryError as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return _saved_exit_code(exc)
+    _print_json({"result": "pass", "query": record, "store_sha256": digest})
+    return 0
+
+
+def cmd_saved_show(args) -> int:
+    try:
+        record = get_saved(args.saved_state, args.id)
+    except SavedQueryError as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return _saved_exit_code(exc)
+    _print_json({"result": "pass", "query": record})
+    return 0
+
+
+def cmd_saved_list(args) -> int:
+    try:
+        records = list_saved(args.saved_state)
+    except SavedQueryError as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return _saved_exit_code(exc)
+    _print_json({"result": "pass", "count": len(records), "queries": records})
+    return 0
+
+
+def cmd_saved_update(args) -> int:
+    try:
+        params = validate_saved_definition(args.mode, _saved_param_flags(args))
+        record, digest = update_saved(args.saved_state, args.id, args.mode, params)
+    except SavedQueryError as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return _saved_exit_code(exc)
+    _print_json({"result": "pass", "query": record, "store_sha256": digest})
+    return 0
+
+
+def cmd_saved_delete(args) -> int:
+    try:
+        digest = delete_saved(args.saved_state, args.id)
+    except SavedQueryError as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return _saved_exit_code(exc)
+    _print_json({"result": "pass", "id": args.id, "store_sha256": digest})
+    return 0
+
+
+def cmd_saved_run(args) -> int:
+    try:
+        handle = _open(args)
+        output = execute_saved(args.saved_state, args.id, handle, args.state, m2=args.m2)
+    except SavedQueryError as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return _saved_exit_code(exc)
+    except (baseline_mod.BaselineError, ServingIndexError, D01InventoryError) as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return 3
+    except QueryError as exc:
+        _print_json({"result": "fail", "detail": str(exc)})
+        return 2
+    _print_json(output)
+    return 0
+
+
 def cmd_dataset(args) -> int:
     try:
         handle = _open(args)
@@ -400,6 +556,132 @@ def build_parser() -> argparse.ArgumentParser:
         help="Q5: the instrument's exact as-published series (with --instrument-symbol)",
     )
     p_query.set_defaults(func=cmd_query)
+
+    p_saved = sub.add_parser(
+        "saved",
+        help="manage the saved-query store (class-(4) user state; distinct root outside the "
+        "derived-state rebuild scope, D37-DEC C1(a); a run never mutates the store, C2(a))",
+    )
+    saved_sub = p_saved.add_subparsers(dest="saved_command", required=True)
+
+    def add_saved_def_flags(p):
+        p.add_argument(
+            "--mode",
+            required=True,
+            help="the exact query-id contract: Q1-dataset, Q2-date-range, Q3-instrument, "
+            "Q4-filter, Q5-association, Q6-calendar, Q7-record-detail, Q8-data-quality, "
+            "Q9-archive-inventory, Q10-qualification",
+        )
+        p.add_argument("--symbol", default=None, help="Q3: listing symbol (exact, as published)")
+        p.add_argument("--series", default=None, help="Q3: series (exact, as published)")
+        p.add_argument("--year", type=int, default=None, help="Q1/Q3: restrict to one calendar-year partition")
+        p.add_argument("--family", default=None, help="Q1: restrict to one format family (exact, as published)")
+        p.add_argument(
+            "--from",
+            dest="date_from",
+            default=None,
+            metavar="YYYY-MM-DD",
+            help="Q2/Q6: inclusive range start (ISO business date)",
+        )
+        p.add_argument(
+            "--to",
+            dest="date_to",
+            default=None,
+            metavar="YYYY-MM-DD",
+            help="Q2/Q6: inclusive range end (ISO business date)",
+        )
+        p.add_argument(
+            "--field",
+            dest="field",
+            action="append",
+            default=None,
+            metavar="NAME=VALUE",
+            help="Q4: exact-value filter on series/segment/source/instrument_type (repeatable)",
+        )
+        p.add_argument(
+            "--identity",
+            dest="identity",
+            default=None,
+            metavar="KEY",
+            help="Q5: identity lookup by exact as-published security_id",
+        )
+        p.add_argument(
+            "--instrument-symbol",
+            dest="instrument_symbol",
+            default=None,
+            metavar="SYMBOL",
+            help="Q5: the instrument's exact as-published listing_symbol",
+        )
+        p.add_argument(
+            "--instrument-series",
+            dest="instrument_series",
+            default=None,
+            metavar="SERIES",
+            help="Q5: the instrument's exact as-published series",
+        )
+        p.add_argument(
+            "--file",
+            dest="source_file",
+            default=None,
+            help="Q7: row file, exactly as served in a Q2/Q3 result (serving.source_file)",
+        )
+        p.add_argument(
+            "--line",
+            dest="source_line_number",
+            type=int,
+            default=None,
+            help="Q7: the row's canonical source_line_number (D05 §8 field)",
+        )
+        p.add_argument(
+            "--repo",
+            default=None,
+            help="Q10: repository root holding the durable in-repository evidence records; omit for explicit absence",
+        )
+
+    p_saved_save = saved_sub.add_parser("save", help="create a saved query")
+    p_saved_save.add_argument(
+        "--saved-state",
+        required=True,
+        help="saved-query store dir (a DISTINCT dir from the derived --state dir; OUTSIDE the package)",
+    )
+    p_saved_save.add_argument(
+        "--id",
+        dest="id",
+        required=True,
+        help="stable saved-query identifier (1-64 chars of [a-z0-9_-], starting with [a-z0-9])",
+    )
+    add_saved_def_flags(p_saved_save)
+    p_saved_save.set_defaults(func=cmd_saved_save)
+
+    p_saved_show = saved_sub.add_parser("show", help="read one saved query by identifier")
+    p_saved_show.add_argument("--saved-state", required=True, help="saved-query store dir")
+    p_saved_show.add_argument("--id", dest="id", required=True, help="saved-query identifier")
+    p_saved_show.set_defaults(func=cmd_saved_show)
+
+    p_saved_list = saved_sub.add_parser("list", help="list saved queries (sorted by identifier)")
+    p_saved_list.add_argument("--saved-state", required=True, help="saved-query store dir")
+    p_saved_list.set_defaults(func=cmd_saved_list)
+
+    p_saved_update = saved_sub.add_parser(
+        "update", help="replace a saved query's definition exactly (full replacement, no merge)"
+    )
+    p_saved_update.add_argument("--saved-state", required=True, help="saved-query store dir")
+    p_saved_update.add_argument("--id", dest="id", required=True, help="saved-query identifier")
+    add_saved_def_flags(p_saved_update)
+    p_saved_update.set_defaults(func=cmd_saved_update)
+
+    p_saved_delete = saved_sub.add_parser("delete", help="explicitly delete one saved query")
+    p_saved_delete.add_argument("--saved-state", required=True, help="saved-query store dir")
+    p_saved_delete.add_argument("--id", dest="id", required=True, help="saved-query identifier")
+    p_saved_delete.set_defaults(func=cmd_saved_delete)
+
+    p_saved_run = saved_sub.add_parser(
+        "run", help="load a saved definition and execute it through the existing query modes"
+    )
+    p_saved_run.add_argument("--saved-state", required=True, help="saved-query store dir")
+    p_saved_run.add_argument("--id", dest="id", required=True, help="saved-query identifier")
+    add_common(p_saved_run, state=True)
+    p_saved_run.set_defaults(func=cmd_saved_run)
 
     p_dataset = sub.add_parser("dataset", help="Q1 dataset/partition selection and yearly summaries")
     add_common(p_dataset, state=True)

@@ -7,8 +7,12 @@ Boundary (D16-09, D23 §§8/10/11/12):
 * serving is a read-only consumer of the baseline; it never invokes or schedules
   historical processing and never treats derived state as a source of truth;
 * the engine remains the owner of the write path;
-* serving state is durable class (4) — always a pure derivation of the baseline,
+* derived serving state is durable class (4) — a pure derivation of the baseline,
   rebuildable at any time; deleting it is never a data event (D16-07);
+* saved queries are class-(4) serving-owned *user* state in a distinct store root
+  outside the derived-state rebuild scope: rebuilding derived state never touches
+  them, deletion is an explicit user-visible operation, and executing a saved query
+  never mutates the store (D37-DEC C1(a)/C2(a));
 * this slice implements the Q1 dataset/partition summaries, the Q2 date-range
   query, the Q3 instrument query (D16-10), the Q4 exact-value filter query
   (series / segment / source / instrument_type as-published values only),
@@ -99,6 +103,22 @@ from .query import (
     query_instrument,
 )
 from .rebuild import rebuild_state
+from .saved import (
+    SAVED_DIGEST_FILENAME,
+    SAVED_FILENAME,
+    SAVED_FORMAT,
+    SAVED_MODES,
+    SavedQueryError,
+    create_saved,
+    delete_saved,
+    execute_saved,
+    get_saved,
+    list_saved,
+    load_saved,
+    save_document,
+    update_saved,
+    validate_saved_definition,
+)
 
 __all__ = [
     "ARCHIVE_QUERY_ID",
@@ -145,4 +165,18 @@ __all__ = [
     "query_calendar",
     "parse_calendar",
     "rebuild_state",
+    "SAVED_FILENAME",
+    "SAVED_DIGEST_FILENAME",
+    "SAVED_FORMAT",
+    "SAVED_MODES",
+    "SavedQueryError",
+    "load_saved",
+    "save_document",
+    "validate_saved_definition",
+    "create_saved",
+    "get_saved",
+    "list_saved",
+    "update_saved",
+    "delete_saved",
+    "execute_saved",
 ]

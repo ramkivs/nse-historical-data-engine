@@ -391,6 +391,43 @@ class M2RealPackageIntegrationTests(unittest.TestCase):
         again = query_calendar(self.handle, document)
         self.assertEqual(json.dumps(again, sort_keys=True), json.dumps(days, sort_keys=True))
 
+    def test_saved_query_run_over_real_baseline(self):
+        """D37-DEC C1(a)/C2(a) over the real qualified baseline: a saved
+        definition executed through the existing query layer must be EXACTLY
+        the corresponding direct-query result (no new semantics), and the
+        execution must leave the saved store byte-identical (no history)."""
+        import hashlib
+        import shutil
+
+        from serving.saved import SAVED_FILENAME, create_saved, execute_saved
+
+        saved_root = tempfile.mkdtemp(prefix="d38-m2-saved-")
+        try:
+            create_saved(saved_root, "m2-rel", "Q3-instrument", {"symbol": "RELIANCE", "series": "EQ"})
+            create_saved(saved_root, "m2-q2", "Q2-date-range", {"date_from": "2024-06-21", "date_to": "2024-07-05"})
+            document, _digest = load_index(self.state, self.handle)
+
+            out3 = execute_saved(saved_root, "m2-rel", self.handle, self.state)
+            rows3 = query_instrument(self.handle, document, "RELIANCE", "EQ")
+            self.assertEqual(out3, {"query": "Q3-instrument", "result_count": len(rows3), "rows": list(rows3)})
+            self.assertGreater(len(rows3), 0)
+
+            out2 = execute_saved(saved_root, "m2-q2", self.handle, self.state)
+            rows2 = query_date_range(self.handle, document, "2024-06-21", "2024-07-05")
+            self.assertEqual(
+                out2,
+                {
+                    "query": DATE_RANGE_QUERY_ID,
+                    "date_from": "2024-06-21",
+                    "date_to": "2024-07-05",
+                    "result_count": len(rows2),
+                    "rows": list(rows2),
+                },
+            )
+            self.assertGreater(len(rows2), 0)
+        finally:
+            shutil.rmtree(saved_root, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()
