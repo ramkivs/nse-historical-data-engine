@@ -126,6 +126,13 @@ button.nav-item[aria-current="page"] .nav-ico, button.nav-item:hover .nav-ico { 
 /* ---------------- content ---------------- */
 #content { flex: 1; min-width: 0; overflow-y: auto; padding: var(--space-4); }
 .page { display: flex; flex-direction: column; gap: var(--space-3); }
+/* Page exclusivity (TASK67, F-N1): the UA rule `[hidden] { display: none }`
+   loses to the author rule `.page { display: flex }` above (author origin
+   wins at equal specificity), which made hidden page sections render anyway
+   and let the nav active state diverge from the displayed page. This
+   higher-specificity author rule (0,2,0 > 0,1,0) restores exclusivity: the
+   `hidden` attribute set by switchPage() in app.js now actually hides. */
+.page[hidden] { display: none; }
 .page-head { display: flex; align-items: flex-start; gap: var(--space-4); }
 .page-title { margin: 0; font-size: 28px; font-weight: 650; color: var(--text-primary); letter-spacing: -0.01em; }
 .page-sub { color: var(--text-muted); font-size: 12px; margin-top: 2px; max-width: 640px; }
